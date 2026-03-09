@@ -1,0 +1,514 @@
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..core import Z80CPU
+from ..tables import (
+    FLAG_C, FLAG_H, FLAG_N, FLAG_PV, FLAG_S, FLAG_Z,
+    get_add_flags, get_sub_flags, get_and_flags, get_or_flags,
+    get_xor_flags, get_cp_flags, get_inc_flags, get_dec_flags
+)
+from .ld8 import _get_indexed_addr
+
+def add_a_r(cpu: "Z80CPU", src: int) -> int:
+    """ADD A,r - Add register to A (4 T-states)"""
+    b = cpu.get_reg8(src)
+    a = cpu.regs.A
+    cpu.regs.A = (a + b) & 0xFF
+    cpu.regs.F = get_add_flags(a, b)
+    return 4
+
+def add_a_n(cpu: "Z80CPU") -> int:
+    """ADD A,n - Add immediate to A (7 T-states)"""
+    pc = cpu.regs.PC
+    cycles = cpu.cycles
+    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    a = cpu.regs.A
+    cpu.regs.A = (a + b) & 0xFF
+    cpu.regs.F = get_add_flags(a, b)
+    return 7
+
+def add_a_hl(cpu: "Z80CPU") -> int:
+    """ADD A,(HL) - Add memory to A (7 T-states)"""
+    cycles = cpu.cycles
+    b = cpu._bus_read(cpu.regs.HL, cycles)
+    a = cpu.regs.A
+    cpu.regs.A = (a + b) & 0xFF
+    cpu.regs.F = get_add_flags(a, b)
+    return 7
+
+def adc_a_r(cpu: "Z80CPU", src: int) -> int:
+    """ADC A,r - Add register with carry to A (4 T-states)"""
+    b = cpu.get_reg8(src)
+    regs = cpu.regs
+    a = regs.A
+    c = regs.F & FLAG_C
+    regs.A = (a + b + c) & 0xFF
+    regs.F = get_add_flags(a, b, c)
+    return 4
+
+def adc_a_n(cpu: "Z80CPU") -> int:
+    """ADC A,n - Add immediate with carry to A (7 T-states)"""
+    pc = cpu.regs.PC
+    cycles = cpu.cycles
+    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    regs = cpu.regs
+    a = regs.A
+    c = regs.F & FLAG_C
+    regs.A = (a + b + c) & 0xFF
+    regs.F = get_add_flags(a, b, c)
+    return 7
+
+def adc_a_hl(cpu: "Z80CPU") -> int:
+    """ADC A,(HL) - Add memory with carry to A (7 T-states)"""
+    cycles = cpu.cycles
+    b = cpu._bus_read(cpu.regs.HL, cycles)
+    regs = cpu.regs
+    a = regs.A
+    c = regs.F & FLAG_C
+    regs.A = (a + b + c) & 0xFF
+    regs.F = get_add_flags(a, b, c)
+    return 7
+
+def sub_r(cpu: "Z80CPU", src: int) -> int:
+    """SUB r - Subtract register from A (4 T-states)"""
+    b = cpu.get_reg8(src)
+    a = cpu.regs.A
+    cpu.regs.A = (a - b) & 0xFF
+    cpu.regs.F = get_sub_flags(a, b)
+    return 4
+
+def sub_n(cpu: "Z80CPU") -> int:
+    """SUB n - Subtract immediate from A (7 T-states)"""
+    pc = cpu.regs.PC
+    cycles = cpu.cycles
+    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    a = cpu.regs.A
+    cpu.regs.A = (a - b) & 0xFF
+    cpu.regs.F = get_sub_flags(a, b)
+    return 7
+
+def sub_hl(cpu: "Z80CPU") -> int:
+    """SUB (HL) - Subtract memory from A (7 T-states)"""
+    cycles = cpu.cycles
+    b = cpu._bus_read(cpu.regs.HL, cycles)
+    a = cpu.regs.A
+    cpu.regs.A = (a - b) & 0xFF
+    cpu.regs.F = get_sub_flags(a, b)
+    return 7
+
+def sbc_a_r(cpu: "Z80CPU", src: int) -> int:
+    """SBC A,r - Subtract register with carry from A (4 T-states)"""
+    b = cpu.get_reg8(src)
+    regs = cpu.regs
+    a = regs.A
+    c = regs.F & FLAG_C
+    regs.A = (a - b - c) & 0xFF
+    regs.F = get_sub_flags(a, b, c)
+    return 4
+
+def sbc_a_n(cpu: "Z80CPU") -> int:
+    """SBC A,n - Subtract immediate with carry from A (7 T-states)"""
+    pc = cpu.regs.PC
+    cycles = cpu.cycles
+    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    regs = cpu.regs
+    a = regs.A
+    c = regs.F & FLAG_C
+    regs.A = (a - b - c) & 0xFF
+    regs.F = get_sub_flags(a, b, c)
+    return 7
+
+def sbc_a_hl(cpu: "Z80CPU") -> int:
+    """SBC A,(HL) - Subtract memory with carry from A (7 T-states)"""
+    cycles = cpu.cycles
+    b = cpu._bus_read(cpu.regs.HL, cycles)
+    regs = cpu.regs
+    a = regs.A
+    c = regs.F & FLAG_C
+    regs.A = (a - b - c) & 0xFF
+    regs.F = get_sub_flags(a, b, c)
+    return 7
+
+def and_r(cpu: "Z80CPU", src: int) -> int:
+    """AND r - Logical AND with register (4 T-states)"""
+    cpu.regs.A &= cpu.get_reg8(src)
+    cpu.regs.F = get_and_flags(cpu.regs.A)
+    return 4
+
+def and_n(cpu: "Z80CPU") -> int:
+    """AND n - Logical AND with immediate (7 T-states)"""
+    pc = cpu.regs.PC
+    cycles = cpu.cycles
+    cpu.regs.A &= cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    cpu.regs.F = get_and_flags(cpu.regs.A)
+    return 7
+
+def and_hl(cpu: "Z80CPU") -> int:
+    """AND (HL) - Logical AND with memory (7 T-states)"""
+    cycles = cpu.cycles
+    cpu.regs.A &= cpu._bus_read(cpu.regs.HL, cycles)
+    cpu.regs.F = get_and_flags(cpu.regs.A)
+    return 7
+
+def or_r(cpu: "Z80CPU", src: int) -> int:
+    """OR r - Logical OR with register (4 T-states)"""
+    cpu.regs.A |= cpu.get_reg8(src)
+    cpu.regs.F = get_or_flags(cpu.regs.A)
+    return 4
+
+def or_n(cpu: "Z80CPU") -> int:
+    """OR n - Logical OR with immediate (7 T-states)"""
+    pc = cpu.regs.PC
+    cycles = cpu.cycles
+    cpu.regs.A |= cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    cpu.regs.F = get_or_flags(cpu.regs.A)
+    return 7
+
+def or_hl(cpu: "Z80CPU") -> int:
+    """OR (HL) - Logical OR with memory (7 T-states)"""
+    cycles = cpu.cycles
+    cpu.regs.A |= cpu._bus_read(cpu.regs.HL, cycles)
+    cpu.regs.F = get_or_flags(cpu.regs.A)
+    return 7
+
+def xor_r(cpu: "Z80CPU", src: int) -> int:
+    """XOR r - Logical XOR with register (4 T-states)"""
+    cpu.regs.A ^= cpu.get_reg8(src)
+    cpu.regs.F = get_xor_flags(cpu.regs.A)
+    return 4
+
+def xor_n(cpu: "Z80CPU") -> int:
+    """XOR n - Logical XOR with immediate (7 T-states)"""
+    pc = cpu.regs.PC
+    cycles = cpu.cycles
+    cpu.regs.A ^= cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    cpu.regs.F = get_xor_flags(cpu.regs.A)
+    return 7
+
+def xor_hl(cpu: "Z80CPU") -> int:
+    """XOR (HL) - Logical XOR with memory (7 T-states)"""
+    cycles = cpu.cycles
+    cpu.regs.A ^= cpu._bus_read(cpu.regs.HL, cycles)
+    cpu.regs.F = get_xor_flags(cpu.regs.A)
+    return 7
+
+def cp_r(cpu: "Z80CPU", src: int) -> int:
+    """CP r - Compare register with A (4 T-states)"""
+    b = cpu.get_reg8(src)
+    cpu.regs.F = get_cp_flags(cpu.regs.A, b)
+    return 4
+
+def cp_n(cpu: "Z80CPU") -> int:
+    """CP n - Compare immediate with A (7 T-states)"""
+    pc = cpu.regs.PC
+    cycles = cpu.cycles
+    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    cpu.regs.F = get_cp_flags(cpu.regs.A, b)
+    return 7
+
+def cp_hl(cpu: "Z80CPU") -> int:
+    """CP (HL) - Compare memory with A (7 T-states)"""
+    cycles = cpu.cycles
+    b = cpu._bus_read(cpu.regs.HL, cycles)
+    cpu.regs.F = get_cp_flags(cpu.regs.A, b)
+    return 7
+
+def inc_r(cpu: "Z80CPU", dest: int) -> int:
+    """INC r - Increment register (4 T-states)"""
+    value = cpu.get_reg8(dest)
+    new_value = (value + 1) & 0xFF
+    cpu.set_reg8(dest, new_value)
+    cpu.regs.F = (cpu.regs.F & FLAG_C) | get_inc_flags(value)
+    return 4
+
+def inc_hl(cpu: "Z80CPU") -> int:
+    """INC (HL) - Increment memory (11 T-states)"""
+    addr = cpu.regs.HL
+    cycles = cpu.cycles
+    value = cpu._bus_read(addr, cycles)
+    new_value = (value + 1) & 0xFF
+    cpu._bus_write(addr, new_value, cycles)
+    cpu.regs.F = (cpu.regs.F & FLAG_C) | get_inc_flags(value)
+    return 11
+
+def dec_r(cpu: "Z80CPU", dest: int) -> int:
+    """DEC r - Decrement register (4 T-states)"""
+    value = cpu.get_reg8(dest)
+    new_value = (value - 1) & 0xFF
+    cpu.set_reg8(dest, new_value)
+    cpu.regs.F = (cpu.regs.F & FLAG_C) | get_dec_flags(value)
+    return 4
+
+def dec_hl(cpu: "Z80CPU") -> int:
+    """DEC (HL) - Decrement memory (11 T-states)"""
+    addr = cpu.regs.HL
+    cycles = cpu.cycles
+    value = cpu._bus_read(addr, cycles)
+    new_value = (value - 1) & 0xFF
+    cpu._bus_write(addr, new_value, cycles)
+    cpu.regs.F = (cpu.regs.F & FLAG_C) | get_dec_flags(value)
+    return 11
+
+def add_a_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """ADD A,IXH/IYH (8 T-states)"""
+    regs = cpu.regs
+    b = regs.IYh if is_iy else regs.IXh
+    a = regs.A
+    regs.A = (a + b) & 0xFF
+    regs.F = get_add_flags(a, b)
+    return 8
+
+def add_a_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """ADD A,IXL/IYL (8 T-states)"""
+    regs = cpu.regs
+    b = regs.IYl if is_iy else regs.IXl
+    a = regs.A
+    regs.A = (a + b) & 0xFF
+    regs.F = get_add_flags(a, b)
+    return 8
+
+def add_a_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """ADD A,(IX/IY+d) (19 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    b = cpu._bus_read(addr, cycles)
+    a = cpu.regs.A
+    cpu.regs.A = (a + b) & 0xFF
+    cpu.regs.F = get_add_flags(a, b)
+    return 19
+
+def adc_a_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """ADC A,(IX/IY+d) (19 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    b = cpu._bus_read(addr, cycles)
+    regs = cpu.regs
+    a = regs.A
+    carry = regs.F & FLAG_C
+    regs.A = (a + b + carry) & 0xFF
+    regs.F = get_add_flags(a, b, carry)
+    return 19
+
+def adc_a_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """ADC A,IXH/IYH (8 T-states) - Undocumented"""
+    regs = cpu.regs
+    b = regs.IYh if is_iy else regs.IXh
+    a = regs.A
+    carry = regs.F & FLAG_C
+    regs.A = (a + b + carry) & 0xFF
+    regs.F = get_add_flags(a, b, carry)
+    return 8
+
+def adc_a_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """ADC A,IXL/IYL (8 T-states) - Undocumented"""
+    regs = cpu.regs
+    b = regs.IYl if is_iy else regs.IXl
+    a = regs.A
+    carry = regs.F & FLAG_C
+    regs.A = (a + b + carry) & 0xFF
+    regs.F = get_add_flags(a, b, carry)
+    return 8
+
+def sub_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """SUB IXH/IYH (8 T-states)"""
+    regs = cpu.regs
+    b = regs.IYh if is_iy else regs.IXh
+    regs.F = get_sub_flags(regs.A, b)
+    regs.A = (regs.A - b) & 0xFF
+    return 8
+
+def sub_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """SUB IXL/IYL (8 T-states)"""
+    regs = cpu.regs
+    b = regs.IYl if is_iy else regs.IXl
+    regs.F = get_sub_flags(regs.A, b)
+    regs.A = (regs.A - b) & 0xFF
+    return 8
+
+def sub_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """SUB (IX/IY+d) (19 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    b = cpu._bus_read(addr, cycles)
+    cpu.regs.F = get_sub_flags(cpu.regs.A, b)
+    cpu.regs.A = (cpu.regs.A - b) & 0xFF
+    return 19
+
+def sbc_a_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """SBC A,(IX/IY+d) (19 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    b = cpu._bus_read(addr, cycles)
+    regs = cpu.regs
+    a = regs.A
+    carry = regs.F & FLAG_C
+    regs.A = (a - b - carry) & 0xFF
+    regs.F = get_sub_flags(a, b, carry)
+    return 19
+
+def sbc_a_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """SBC A,IXH/IYH (8 T-states) - Undocumented"""
+    regs = cpu.regs
+    b = regs.IYh if is_iy else regs.IXh
+    a = regs.A
+    carry = regs.F & FLAG_C
+    regs.A = (a - b - carry) & 0xFF
+    regs.F = get_sub_flags(a, b, carry)
+    return 8
+
+def sbc_a_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """SBC A,IXL/IYL (8 T-states) - Undocumented"""
+    regs = cpu.regs
+    b = regs.IYl if is_iy else regs.IXl
+    a = regs.A
+    carry = regs.F & FLAG_C
+    regs.A = (a - b - carry) & 0xFF
+    regs.F = get_sub_flags(a, b, carry)
+    return 8
+
+def and_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """AND IXH/IYH (8 T-states)"""
+    regs = cpu.regs
+    regs.A &= regs.IYh if is_iy else regs.IXh
+    regs.F = get_and_flags(regs.A)
+    return 8
+
+def and_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """AND IXL/IYL (8 T-states)"""
+    regs = cpu.regs
+    regs.A &= regs.IYl if is_iy else regs.IXl
+    regs.F = get_and_flags(regs.A)
+    return 8
+
+def and_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """AND (IX/IY+d) (19 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    cpu.regs.A &= cpu._bus_read(addr, cycles)
+    cpu.regs.F = get_and_flags(cpu.regs.A)
+    return 19
+
+def or_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """OR IXH/IYH (8 T-states)"""
+    regs = cpu.regs
+    regs.A |= regs.IYh if is_iy else regs.IXh
+    regs.F = get_or_flags(regs.A)
+    return 8
+
+def or_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """OR IXL/IYL (8 T-states)"""
+    regs = cpu.regs
+    regs.A |= regs.IYl if is_iy else regs.IXl
+    regs.F = get_or_flags(regs.A)
+    return 8
+
+def or_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """OR (IX/IY+d) (19 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    cpu.regs.A |= cpu._bus_read(addr, cycles)
+    cpu.regs.F = get_or_flags(cpu.regs.A)
+    return 19
+
+def xor_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """XOR IXH/IYH (8 T-states)"""
+    regs = cpu.regs
+    regs.A ^= regs.IYh if is_iy else regs.IXh
+    regs.F = get_xor_flags(regs.A)
+    return 8
+
+def xor_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """XOR IXL/IYL (8 T-states)"""
+    regs = cpu.regs
+    regs.A ^= regs.IYl if is_iy else regs.IXl
+    regs.F = get_xor_flags(regs.A)
+    return 8
+
+def xor_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """XOR (IX/IY+d) (19 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    cpu.regs.A ^= cpu._bus_read(addr, cycles)
+    cpu.regs.F = get_xor_flags(cpu.regs.A)
+    return 19
+
+def cp_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """CP IXH/IYH (8 T-states)"""
+    regs = cpu.regs
+    b = regs.IYh if is_iy else regs.IXh
+    regs.F = get_cp_flags(regs.A, b)
+    return 8
+
+def cp_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """CP IXL/IYL (8 T-states)"""
+    regs = cpu.regs
+    b = regs.IYl if is_iy else regs.IXl
+    regs.F = get_cp_flags(regs.A, b)
+    return 8
+
+def cp_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """CP (IX/IY+d) (19 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    b = cpu._bus_read(addr, cycles)
+    cpu.regs.F = get_cp_flags(cpu.regs.A, b)
+    return 19
+
+def inc_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """INC IXH/IYH (8 T-states)"""
+    regs = cpu.regs
+    value = regs.IYh if is_iy else regs.IXh
+    new_value = (value + 1) & 0xFF
+    if is_iy: regs.IYh = new_value
+    else: regs.IXh = new_value
+    regs.F = (regs.F & FLAG_C) | get_inc_flags(value)
+    return 8
+
+def inc_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """INC IXL/IYL (8 T-states)"""
+    regs = cpu.regs
+    value = regs.IYl if is_iy else regs.IXl
+    new_value = (value + 1) & 0xFF
+    if is_iy: regs.IYl = new_value
+    else: regs.IXl = new_value
+    regs.F = (regs.F & FLAG_C) | get_inc_flags(value)
+    return 8
+
+def inc_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """INC (IX/IY+d) (23 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    value = cpu._bus_read(addr, cycles)
+    new_value = (value + 1) & 0xFF
+    cpu._bus_write(addr, new_value, cycles)
+    cpu.regs.F = (cpu.regs.F & FLAG_C) | get_inc_flags(value)
+    return 23
+
+def dec_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """DEC IXH/IYH (8 T-states)"""
+    regs = cpu.regs
+    value = regs.IYh if is_iy else regs.IXh
+    new_value = (value - 1) & 0xFF
+    if is_iy: regs.IYh = new_value
+    else: regs.IXh = new_value
+    regs.F = (regs.F & FLAG_C) | get_dec_flags(value)
+    return 8
+
+def dec_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """DEC IXL/IYL (8 T-states)"""
+    regs = cpu.regs
+    value = regs.IYl if is_iy else regs.IXl
+    new_value = (value - 1) & 0xFF
+    if is_iy: regs.IYl = new_value
+    else: regs.IXl = new_value
+    regs.F = (regs.F & FLAG_C) | get_dec_flags(value)
+    return 8
+
+def dec_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """DEC (IX/IY+d) (23 T-states)"""
+    addr = _get_indexed_addr(cpu, is_iy)
+    cycles = cpu.cycles
+    value = cpu._bus_read(addr, cycles)
+    new_value = (value - 1) & 0xFF
+    cpu._bus_write(addr, new_value, cycles)
+    cpu.regs.F = (cpu.regs.F & FLAG_C) | get_dec_flags(value)
+    return 23
