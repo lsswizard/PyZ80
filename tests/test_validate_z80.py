@@ -7,11 +7,11 @@ Tests the PythonZ80 implementation against expected Z80 behavior.
 import sys
 import pytest
 
-sys.path.insert(0, "/home/lss/builds/PythonZ80")
+sys.path.insert(0, "/home/lss/builds/PyZ80")
 
 from core import Z80CPU
 from core.instructions import block, bit
-from core.tables import (
+from core.flags import (
     FLAG_S,
     FLAG_Z,
     FLAG_H,

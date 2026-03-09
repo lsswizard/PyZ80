@@ -12,11 +12,13 @@ Exports:
 - Z80Bus: Bus protocol interface
 """
 
-from .core import Z80CPU, Registers, Z80Bus, SimpleBus
+from .cpu import Z80CPU
+from .registers import Registers
+from .bus import Z80Bus, SimpleBus
 from .state import CPUState, StateManager
 from .decoder import InstructionDecoder
-from .pipeline import MicroOp, PrefixedMicroOp
-from .pipeline import read_byte, read_word, write_byte, write_word, push_word, pop_word
+from .primitives import MicroOp, PrefixedMicroOp
+from .primitives import read_byte, read_word, write_byte, write_word, push_word, pop_word
 
 __all__ = [
     "Z80CPU",

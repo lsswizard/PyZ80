@@ -17,7 +17,7 @@ Note on DDCB/FDCB instructions:
 """
 
 from typing import Optional
-from .pipeline import MicroOp, read_byte
+from .primitives import MicroOp, read_byte
 from .instructions import (
     get_base_opcode,
     get_cb_opcode,

@@ -261,3 +261,21 @@ def get_sbc16_flags(hl: int, reg: int, carry: int) -> int:
     if (hl ^ reg) & (hl ^ result) & 0x8000:
         flags |= FLAG_PV
     return flags
+
+
+def _build_cond_table():
+    FLAG_S, FLAG_Z, FLAG_PV, FLAG_C = 0x80, 0x40, 0x04, 0x01
+    table = [[False] * 8 for _ in range(256)]
+    for f in range(256):
+        table[f][0] = not (f & FLAG_Z)  # NZ
+        table[f][1] = bool(f & FLAG_Z)  # Z
+        table[f][2] = not (f & FLAG_C)  # NC
+        table[f][3] = bool(f & FLAG_C)  # C
+        table[f][4] = not (f & FLAG_PV)  # PO
+        table[f][5] = bool(f & FLAG_PV)  # PE
+        table[f][6] = not (f & FLAG_S)  # P
+        table[f][7] = bool(f & FLAG_S)  # M
+    return table
+
+
+COND_TABLE = _build_cond_table()

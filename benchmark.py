@@ -8,7 +8,8 @@ import sys
 
 sys.path.insert(0, ".")
 
-from core.core import Z80CPU, SimpleBus
+from core.cpu import Z80CPU
+from core.bus import SimpleBus
 from core.decoder import InstructionDecoder
 
 

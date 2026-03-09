@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..core import Z80CPU
-from ..tables import (
+from ..flags import (
     FLAG_S, FLAG_Z, FLAG_PV, FLAG_H, FLAG_N, FLAG_C, FLAG_F3, FLAG_F5,
     get_daa_result, get_sub_flags
 )

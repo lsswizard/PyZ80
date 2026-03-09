@@ -113,7 +113,7 @@ def ld_nn_a(cpu: "Z80CPU") -> int:
 
 def ld_a_i(cpu: "Z80CPU") -> int:
     """LD A,I - Load I register to A (9 T-states)"""
-    from ..tables import FLAG_C, FLAG_S, FLAG_F3, FLAG_F5, FLAG_Z, FLAG_PV
+    from ..flags import FLAG_C, FLAG_S, FLAG_F3, FLAG_F5, FLAG_Z, FLAG_PV
 
     cpu.regs.A = cpu.regs.I
     cpu.regs.F = (cpu.regs.F & FLAG_C) | (cpu.regs.A & (FLAG_S | FLAG_F3 | FLAG_F5))
@@ -126,7 +126,7 @@ def ld_a_i(cpu: "Z80CPU") -> int:
 
 def ld_a_r(cpu: "Z80CPU") -> int:
     """LD A,R - Load R register to A (9 T-states)"""
-    from ..tables import FLAG_C, FLAG_S, FLAG_F3, FLAG_F5, FLAG_Z, FLAG_PV
+    from ..flags import FLAG_C, FLAG_S, FLAG_F3, FLAG_F5, FLAG_Z, FLAG_PV
 
     cpu.regs.A = cpu.regs.R
     cpu.regs.F = (cpu.regs.F & FLAG_C) | (cpu.regs.A & (FLAG_S | FLAG_F3 | FLAG_F5))
