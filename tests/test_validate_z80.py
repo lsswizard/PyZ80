@@ -2108,12 +2108,13 @@ class TestTiming:
     )
     def test_instruction_timing(self, cpu, program, mnemonic, expected_cycles):
         """Verify cycle count for {mnemonic}."""
-        for _i, _b in enumerate(program): cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
+        for _i, _b in enumerate(program):
+            cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
         cpu.regs.PC = 0
         cycles = cpu.step()
-        assert (
-            cycles == expected_cycles
-        ), f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        assert cycles == expected_cycles, (
+            f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        )
 
     def test_djnz_no_branch_timing(self, cpu):
         """DJNZ — no branch (B=1) takes 8 cycles."""
@@ -2216,12 +2217,13 @@ class TestTiming:
     )
     def test_cb_timing(self, cpu, program, mnemonic, expected_cycles):
         """CB-prefix instruction timing."""
-        for _i, _b in enumerate(program): cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
+        for _i, _b in enumerate(program):
+            cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
         cpu.regs.PC = 0
         cycles = cpu.step()
-        assert (
-            cycles == expected_cycles
-        ), f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        assert cycles == expected_cycles, (
+            f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        )
 
     @pytest.mark.parametrize(
         "program,mnemonic,expected_cycles",
@@ -2243,12 +2245,13 @@ class TestTiming:
     )
     def test_ed_timing(self, cpu, program, mnemonic, expected_cycles):
         """ED-prefix instruction timing."""
-        for _i, _b in enumerate(program): cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
+        for _i, _b in enumerate(program):
+            cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
         cpu.regs.PC = 0
         cycles = cpu.step()
-        assert (
-            cycles == expected_cycles
-        ), f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        assert cycles == expected_cycles, (
+            f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        )
 
     @pytest.mark.parametrize(
         "program,mnemonic,expected_cycles",
@@ -2266,12 +2269,13 @@ class TestTiming:
     def test_ix_timing(self, cpu, program, mnemonic, expected_cycles):
         """IX-prefix instruction timing."""
         cpu.regs.IX = 0x1000
-        for _i, _b in enumerate(program): cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
+        for _i, _b in enumerate(program):
+            cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
         cpu.regs.PC = 0
         cycles = cpu.step()
-        assert (
-            cycles == expected_cycles
-        ), f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        assert cycles == expected_cycles, (
+            f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        )
 
 
 # ============================================================
@@ -2405,6 +2409,91 @@ class TestInterrupts:
         write_program(cpu, [0xED, 0x4D])
         cpu.step()
         assert cpu.regs.PC == 0x2000
+
+    def test_maskable_interrupt_clears_both_iffs(self, cpu):
+        """INT — clears both IFF1 and IFF2."""
+        cpu.regs.PC = 0x1000
+        cpu.regs.SP = 0xFFFF
+        cpu.regs.IM = 1
+        cpu.regs.IFF1 = True
+        cpu.regs.IFF2 = True
+        cpu.trigger_interrupt(0x00)
+        cpu.step()
+        assert not cpu.regs.IFF1
+        assert not cpu.regs.IFF2
+
+    def test_nmi_exits_halt(self, cpu):
+        """NMI — exits HALT and jumps to 0x0066."""
+        write_program(cpu, [0x76])  # HALT
+        cpu.step()
+        assert cpu.halted
+        assert cpu.regs.PC == 0
+        cpu.trigger_nmi()
+        cpu.step()
+        assert not cpu.halted
+        assert cpu.regs.PC == 0x0066  # NMI vector
+
+    def test_nmi_returns_past_halt(self, cpu):
+        """NMI — RETN returns to instruction after HALT."""
+        cpu.regs.SP = 0xFFFD
+        cpu.bus.bus_write(0xFFFD, 0x01, cpu.cycles)  # Return address low
+        cpu.bus.bus_write(0xFFFE, 0x00, cpu.cycles)  # Return address high
+        write_program(cpu, [0x76])  # HALT
+        cpu.step()
+        assert cpu.halted
+        cpu.trigger_nmi()
+        cpu.step()  # Handle NMI
+        cpu.bus.bus_write(0x0066, 0xED, cpu.cycles)  # RETN at NMI vector
+        cpu.bus.bus_write(0x0067, 0x45, cpu.cycles)
+        cpu.step()  # Execute RETN
+        assert cpu.regs.PC == 1  # Returned past HALT
+
+    def test_maskable_interrupt_exits_halt(self, cpu):
+        """INT — exits HALT and advances PC past HALT instruction."""
+        cpu.regs.IM = 1
+        cpu.regs.IFF1 = True
+        write_program(cpu, [0x76])  # HALT
+        cpu.step()
+        assert cpu.halted
+        assert cpu.regs.PC == 0
+        cpu.trigger_interrupt(0x00)
+        cpu.step()
+        assert not cpu.halted
+        assert cpu.regs.PC == 0x0038  # IM 1 vector
+
+    def test_ei_when_already_enabled(self, cpu):
+        """EI — works correctly when interrupts already enabled."""
+        cpu.regs.IFF1 = True
+        cpu.regs.IFF2 = True
+        write_program(cpu, [0xFB, 0x00])  # EI; NOP
+        cpu.step()  # EI
+        cpu.step()  # NOP (EI takes effect)
+        assert cpu.regs.IFF1
+        assert cpu.regs.IFF2
+
+    def test_ld_a_i_interrupt_bug(self, cpu):
+        """LD A,I — PV cleared if interrupt accepted after."""
+        cpu.regs.I = 0x55
+        cpu.regs.IFF2 = True
+        write_program(cpu, [0xED, 0x57, 0x00])  # LD A,I; NOP
+        cpu.step()  # LD A,I
+        cpu.trigger_interrupt(0x00)
+        cpu.regs.IM = 1
+        cpu.regs.IFF1 = True
+        cpu.step()  # NOP with interrupt
+        assert not flag_set(cpu, FLAG_PV)  # PV should be cleared due to bug
+
+    def test_ld_a_r_interrupt_bug(self, cpu):
+        """LD A,R — PV cleared if interrupt accepted after."""
+        cpu.regs.R = 0x42
+        cpu.regs.IFF2 = True
+        write_program(cpu, [0xED, 0x5F, 0x00])  # LD A,R; NOP
+        cpu.step()  # LD A,R
+        cpu.trigger_interrupt(0x00)
+        cpu.regs.IM = 1
+        cpu.regs.IFF1 = True
+        cpu.step()  # NOP with interrupt
+        assert not flag_set(cpu, FLAG_PV)  # PV should be cleared due to bug
 
 
 # ============================================================
@@ -3252,6 +3341,6 @@ class TestParityTable:
         """PARITY_TABLE[n] matches computed even parity."""
         bit_count = bin(val).count("1")
         expected_even_parity = (bit_count % 2) == 0
-        assert (
-            bool(PARITY_TABLE[val]) == expected_even_parity
-        ), f"PARITY_TABLE[{val:#04x}] incorrect"
+        assert bool(PARITY_TABLE[val]) == expected_even_parity, (
+            f"PARITY_TABLE[{val:#04x}] incorrect"
+        )

@@ -10,7 +10,6 @@ sys.path.insert(0, ".")
 
 from core.cpu import Z80CPU
 from core.bus import SimpleBus
-from core.decoder import InstructionDecoder
 
 
 def create_benchmark_program(memory: bytearray) -> None:
@@ -67,7 +66,7 @@ def run_benchmark(cycles: int = 100000, verbose: bool = True) -> dict:
     }
 
     if verbose:
-        print(f"Benchmark Results:")
+        print("Benchmark Results:")
         print(f"  Target cycles:     {cycles:,}")
         print(f"  Instructions:     {instructions:,}")
         print(f"  Elapsed time:     {elapsed:.3f} seconds")

@@ -3,8 +3,7 @@ Z80 CPU Core Module
 High-performance, machine-independent Z80 CPU emulator.
 """
 
-from typing import Optional, Dict, Any
-import array
+from typing import Optional
 
 from .decoder import InstructionDecoder
 from .state import CPUState
@@ -30,11 +29,11 @@ class Z80CPU:
 
         # Cache frequently used attributes locally for performance
         self._bus_read = self.bus.bus_read
-        self._bus_write = self.bus.bus_write
+        self._bus_write = self._internal_write
         self._bus_io_read = self.bus.bus_io_read
         self._bus_io_write = self.bus.bus_io_write
         self._decode = self.decoder.decode
-        
+
         # Optimized memory view for decoder (if bus provides one)
         self._mem = getattr(self.bus, "memory", None)
         if self._mem is None:
@@ -66,7 +65,9 @@ class Z80CPU:
         self.interrupt_pending = False
         self.interrupt_data = 0xFF
         self.nmi_pending = False
+        self.bus_request = False
         self._pc_modified = False
+        self._is_ld_a_ir = False
         self.decoder.invalidate_cache()
 
     # -------------------------------------------------------------------------
@@ -89,6 +90,11 @@ class Z80CPU:
     def io_write(self, port: int, value: int) -> None:
         """Write to I/O port via bus."""
         self._bus_io_write(port, value, self.cycles)
+
+    def _internal_write(self, addr: int, value: int, cycles: int) -> None:
+        """Internal write wrapper that ensures the decoder cache is always invalidated."""
+        self.bus.bus_write(addr, value, cycles)
+        self.decoder.invalidate_cache(addr)
 
     def fetch_byte(self) -> int:
         """Fetch opcode byte and increment PC."""
@@ -127,15 +133,19 @@ class Z80CPU:
         regs = self.regs
         regs.IFF2 = regs.IFF1
         regs.IFF1 = False
-        self.halted = False
-        
-        # Push PC to stack via bus
+
+        # If HALTed, advance PC past HALT instruction
+        if self.halted:
+            self.halted = False
+            regs.PC = (regs.PC + 1) & 0xFFFF
+
+        # Push PC to stack (5 cycles for push)
         cycles = self.cycles
         sp = (regs.SP - 2) & 0xFFFF
         pc = regs.PC
-        self._bus_write(sp, pc & 0xFF, cycles)
-        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, cycles)
-        
+        self._bus_write(sp, pc & 0xFF, cycles + 1)
+        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, cycles + 2)
+
         regs.SP = sp
         regs.PC = 0x0066
         self._pc_modified = True
@@ -144,28 +154,42 @@ class Z80CPU:
     def _handle_maskable_interrupt(self) -> int:
         self.interrupt_pending = False
         regs = self.regs
-        regs.IFF2 = regs.IFF1
         regs.IFF1 = False
+        regs.IFF2 = False
         if self.halted:
             self.halted = False
             regs.PC = (regs.PC + 1) & 0xFFFF
 
-        # Push PC to stack
+        # Push PC to stack (7 cycles)
         cycles = self.cycles
         sp = (regs.SP - 2) & 0xFFFF
         pc = regs.PC
-        self._bus_write(sp, pc & 0xFF, cycles)
-        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, cycles)
+        self._bus_write(sp, pc & 0xFF, cycles + 1)
+        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, cycles + 2)
         regs.SP = sp
 
-        if regs.IM <= 1:
+        if regs.IM == 0:
+            # IM 0: Execute instruction from data bus (typically RST 38h)
+            # The CPU fetches a byte from the data bus and executes it
+            opcode = self.interrupt_data
+            # RST 38h is the most common; handle RST opcodes (07, 0F, 17, 1F, 27, 2F, 37, 3F)
+            if 0xC7 <= opcode <= 0xFF and (opcode & 0xC7) == 0xC7:
+                vector = opcode & 0x38
+                regs.PC = vector
+                self._pc_modified = True
+                return 13
+            regs.PC = 0x0038
+            self._pc_modified = True
+            return 13
+        elif regs.IM == 1:
             regs.PC = 0x0038
             self._pc_modified = True
             return 13
         else:
-            vector = (regs.I << 8) | self.interrupt_data
-            low = self._bus_read(vector, cycles)
-            high = self._bus_read((vector + 1) & 0xFFFF, cycles)
+            # IM 2: Vectored interrupt (19 cycles total: 7 push + 2 vector read + 2 wait)
+            vector = (regs.I << 8) | (self.interrupt_data & 0xFE)
+            low = self._bus_read(vector, cycles + 7)
+            high = self._bus_read((vector + 1) & 0xFFFF, cycles + 8)
             regs.PC = low | (high << 8)
             self._pc_modified = True
             return 19
@@ -185,7 +209,12 @@ class Z80CPU:
         opcode = bus_read(pc, cycles)
 
         # Fast-path: no interrupt pending or deferred
-        if not (self.interrupt_pending or self.nmi_pending or regs.EI_PENDING or regs.EI_JUST_RESOLVED):
+        if not (
+            self.interrupt_pending
+            or self.nmi_pending
+            or regs.EI_PENDING
+            or regs.EI_JUST_RESOLVED
+        ):
             if self.halted:
                 self._increment_r(1)
                 self.cycles += 4
@@ -211,25 +240,26 @@ class Z80CPU:
 
         self.cycles += op_cycles
         self.instruction_count += 1
-        regs.UnresolvedPrefix = (op.length == 1 and is_prefixed)
+        regs.UnresolvedPrefix = op.length == 1 and is_prefixed
+
+        # Track if this was LD A,I or LD A,R for interrupt bug
+        if opcode == 0xED:
+            next_byte = self._bus_read((pc + 1) & 0xFFFF, self.cycles)
+            self._is_ld_a_ir = next_byte in (0x57, 0x5F)
+        else:
+            self._is_ld_a_ir = False
 
         return op_cycles
 
     def _step_interrupt(self, opcode: int, pc: int) -> int:
         """Handle interrupts and deferrals (slow-path)."""
         regs = self.regs
-        
-        # Detect LD A,I or LD A,R for interrupt bug simulation
-        self._is_ld_a_ir = (opcode == 0xED and self._bus_read((pc + 1) & 0xFFFF, self.cycles) in (0x57, 0x5F))
 
         interrupt_cycles = 0
         if regs.EI_PENDING and not regs.UnresolvedPrefix:
             regs.EI_PENDING = False
             regs.EI_JUST_RESOLVED = True
-            if not regs.IFF1:
-                regs.IFF1 = regs.IFF2 = True
-            else:
-                interrupt_cycles = self.handle_interrupt()
+            regs.IFF1 = regs.IFF2 = True
         elif regs.EI_JUST_RESOLVED:
             regs.EI_JUST_RESOLVED = False
             interrupt_cycles = self.handle_interrupt()
@@ -242,12 +272,11 @@ class Z80CPU:
             self.cycles += interrupt_cycles
             return interrupt_cycles
 
-        # If we got here, no interrupt was actually taken, so continue with normal step
         if self.halted:
             self._increment_r(1)
             self.cycles += 4
             return 4
-            
+
         op = self._decode(self._mem, pc)
         self._pc_modified = False
         is_prefixed = opcode in (0xCB, 0xDD, 0xFD, 0xED)
@@ -257,7 +286,8 @@ class Z80CPU:
             regs.PC = (pc + op.length) & 0xFFFF
         self.cycles += op_cycles
         self.instruction_count += 1
-        regs.UnresolvedPrefix = (op.length == 1 and is_prefixed)
+        regs.UnresolvedPrefix = op.length == 1 and is_prefixed
+
         return op_cycles
 
     def _increment_r(self, amount: int) -> None:
@@ -276,27 +306,42 @@ class Z80CPU:
     def get_reg8(self, reg: int) -> int:
         """Get 8-bit register by index (0-7)."""
         regs = self.regs
-        if reg == 0: return regs.B
-        if reg == 1: return regs.C
-        if reg == 2: return regs.D
-        if reg == 3: return regs.E
-        if reg == 4: return regs.H
-        if reg == 5: return regs.L
-        if reg == 6: return self._bus_read(regs.HL, self.cycles)
+        if reg == 0:
+            return regs.B
+        if reg == 1:
+            return regs.C
+        if reg == 2:
+            return regs.D
+        if reg == 3:
+            return regs.E
+        if reg == 4:
+            return regs.H
+        if reg == 5:
+            return regs.L
+        if reg == 6:
+            return self._bus_read(regs.HL, self.cycles)
         return regs.A
 
     def set_reg8(self, reg: int, value: int) -> None:
         """Set 8-bit register by index."""
         regs = self.regs
         value &= 0xFF
-        if reg == 0: regs.B = value
-        elif reg == 1: regs.C = value
-        elif reg == 2: regs.D = value
-        elif reg == 3: regs.E = value
-        elif reg == 4: regs.H = value
-        elif reg == 5: regs.L = value
-        elif reg == 6: self._bus_write(regs.HL, value, self.cycles)
-        else: regs.A = value
+        if reg == 0:
+            regs.B = value
+        elif reg == 1:
+            regs.C = value
+        elif reg == 2:
+            regs.D = value
+        elif reg == 3:
+            regs.E = value
+        elif reg == 4:
+            regs.H = value
+        elif reg == 5:
+            regs.L = value
+        elif reg == 6:
+            self._bus_write(regs.HL, value, self.cycles)
+        else:
+            regs.A = value
 
     def get_state(self) -> CPUState:
         """Return snapshot of current state."""
@@ -306,6 +351,10 @@ class Z80CPU:
             halted=self.halted,
             cycles=self.cycles,
             instruction_count=self.instruction_count,
+            interrupt_pending=self.interrupt_pending,
+            interrupt_data=self.interrupt_data,
+            nmi_pending=self.nmi_pending,
+            bus_request=self.bus_request,
         )
 
     def set_state(self, state: CPUState) -> None:
@@ -314,10 +363,15 @@ class Z80CPU:
         self.halted = state.halted
         self.cycles = state.cycles
         self.instruction_count = state.instruction_count
+        self.interrupt_pending = getattr(state, "interrupt_pending", False)
+        self.interrupt_data = getattr(state, "interrupt_data", 0xFF)
+        self.nmi_pending = getattr(state, "nmi_pending", False)
+        self.bus_request = getattr(state, "bus_request", False)
         self.decoder.invalidate_cache()
 
     def _write_trace(self, pc, opcode, op):
-        if not self._trace_file: return
+        if not self._trace_file:
+            return
         regs = self.regs
         self._trace_file.write(
             f"{pc:04X} {opcode:02X} {op.mnemonic:<16} "
@@ -328,7 +382,8 @@ class Z80CPU:
 
     def enable_trace(self, filename: str = "cpu_trace.log") -> None:
         """Start logging CPU state to file."""
-        if self._trace_file: self.disable_trace()
+        if self._trace_file:
+            self.disable_trace()
         self._trace_file = open(filename, "w")
         self._trace_enabled = True
 
@@ -338,3 +393,9 @@ class Z80CPU:
             self._trace_file.close()
             self._trace_file = None
         self._trace_enabled = False
+
+    def __del__(self) -> None:
+        """Ensure trace file is closed on object destruction."""
+        if self._trace_file:
+            self._trace_file.close()
+            self._trace_file = None

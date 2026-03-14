@@ -162,9 +162,10 @@ class InstructionDecoder:
             for i in range(65536):
                 self.cache[i] = None
         else:
-            # FIX Bug5+OPT5: invalidate multi-byte instruction range
-            for a in range(max(0, addr - 3), addr + 1):
-                self.cache[a] = None
+            # FIX Bug5+OPT5: invalidate multi-byte instruction range with wrap-around
+            addr &= 0xFFFF
+            for i in range(4):
+                self.cache[(addr - i) & 0xFFFF] = None
 
     def invalidate_range(self, start: int, end: int) -> None:
         """Invalidate all cached entries in [start, end).

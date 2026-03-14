@@ -54,15 +54,6 @@ def ld_hl_nn_ed(cpu: "Z80CPU") -> int:
     return 20
 
 
-def ld_nn_hl_ed(cpu: "Z80CPU") -> int:
-    """ED LD (nn),HL - Store HL to 16-bit address (20 T-states)"""
-    addr = _read_addr_from_pc(cpu, 2)
-    cycles = cpu.cycles
-    cpu._bus_write(addr, cpu.regs.L, cycles)
-    cpu._bus_write((addr + 1) & 0xFFFF, cpu.regs.H, cycles)
-    return 20
-
-
 def ld_nn_hl(cpu: "Z80CPU") -> int:
     """LD (nn),HL - Store HL to 16-bit address (16 T-states)"""
     addr = _read_addr_from_pc(cpu, 1)
