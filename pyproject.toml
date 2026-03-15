@@ -1,7 +1,11 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "pyz80"
-version = "0.1.0"
-description = "Add your description here"
+name = "PyZ80"
+version = "1.1.0"
+description = "Python Z80 Emulation"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

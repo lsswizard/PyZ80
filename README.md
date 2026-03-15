@@ -10,12 +10,6 @@ A high-performance, cycle-exact Z80 CPU emulator written in Python.
 - **Pre-decoded Cache**: Optimized instruction execution with 64KB decode cache
 - **Clean Architecture**: Machine-independent design via Z80Bus protocol
 
-## Installation
-
-```bash
-pip install pyz80
-```
-
 ## Quick Start
 
 ```python
