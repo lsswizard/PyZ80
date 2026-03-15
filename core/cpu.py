@@ -1,6 +1,15 @@
 """
 Z80 CPU Core Module
-High-performance, machine-independent Z80 CPU emulator.
+
+This module provides a cycle-exact Z80 CPU emulator that is fully machine-independent.
+The CPU communicates with the outside world exclusively through the Z80Bus interface,
+making it suitable for emulating various Z80-based systems (ZX Spectrum, Amstrad CPC, etc.).
+
+Features:
+- Cycle-exact instruction timing with proper M-cycle sequencing
+- Support for all documented and undocumented Z80 instructions
+- Interrupt handling (NMI and maskable interrupts via INT pin)
+- Optional instruction tracing for debugging
 """
 
 from typing import Optional
@@ -11,18 +20,24 @@ from .flags import FLAG_PV, COND_TABLE
 from .registers import Registers
 from .bus import Z80Bus, SimpleBus
 
-# =============================================================================
-# Z80 CPU Class
-# =============================================================================
-
 
 class Z80CPU:
     """
-    Machine-independent Z80 CPU core.
-    Interacts with its environment strictly through the Z80Bus interface.
+    Z80 CPU emulator core.
+
+    This class implements a cycle-accurate Z80 processor. All memory and I/O operations
+    are delegated to a Z80Bus implementation, allowing the emulator to run on any
+    platform with appropriate memory mapping.
+
+    Attributes:
+        regs: Register file (A, B, C, D, E, H, L, F, IX, IY, SP, PC, etc.)
+        bus: Bus interface for memory/IO operations
+        cycles: Total T-states executed since reset
+        halted: Whether the CPU is in HALT state
     """
 
     def __init__(self, bus: Optional[Z80Bus] = None):
+        """Initialize CPU with given bus interface."""
         self.regs = Registers()
         self.bus = bus or SimpleBus()
         self.decoder = InstructionDecoder()
@@ -37,7 +52,6 @@ class Z80CPU:
         # Optimized memory view for decoder (if bus provides one)
         self._mem = getattr(self.bus, "memory", None)
         if self._mem is None:
-            # Fallback to a proxy if bus is completely opaque
             self._mem = self.bus
 
         self.halted = False
@@ -90,6 +104,11 @@ class Z80CPU:
     def io_write(self, port: int, value: int) -> None:
         """Write to I/O port via bus."""
         self._bus_io_write(port, value, self.cycles)
+
+    def advance_cycles(self, n: int) -> int:
+        """Advance T-state counter by n cycles. Returns new value."""
+        self.cycles += n
+        return self.cycles
 
     def _internal_write(self, addr: int, value: int, cycles: int) -> None:
         """Internal write wrapper that ensures the decoder cache is always invalidated."""
@@ -144,7 +163,8 @@ class Z80CPU:
         sp = (regs.SP - 2) & 0xFFFF
         pc = regs.PC
         self._bus_write(sp, pc & 0xFF, cycles + 1)
-        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, cycles + 2)
+        self.advance_cycles(3)
+        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, self.cycles)
 
         regs.SP = sp
         regs.PC = 0x0066
@@ -165,7 +185,8 @@ class Z80CPU:
         sp = (regs.SP - 2) & 0xFFFF
         pc = regs.PC
         self._bus_write(sp, pc & 0xFF, cycles + 1)
-        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, cycles + 2)
+        self.advance_cycles(3)
+        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, self.cycles)
         regs.SP = sp
 
         if regs.IM == 0:
@@ -188,8 +209,9 @@ class Z80CPU:
         else:
             # IM 2: Vectored interrupt (19 cycles total: 7 push + 2 vector read + 2 wait)
             vector = (regs.I << 8) | (self.interrupt_data & 0xFE)
-            low = self._bus_read(vector, cycles + 7)
-            high = self._bus_read((vector + 1) & 0xFFFF, cycles + 8)
+            low = self._bus_read(vector, self.cycles)
+            self.advance_cycles(3)
+            high = self._bus_read((vector + 1) & 0xFFFF, self.cycles)
             regs.PC = low | (high << 8)
             self._pc_modified = True
             return 19
@@ -205,8 +227,11 @@ class Z80CPU:
         bus_read = self._bus_read
         cycles = self.cycles
 
-        # Fetch first byte
+        # Fetch first byte (at current T-state)
         opcode = bus_read(pc, cycles)
+
+        # Advance T-state by M1 duration (4 cycles)
+        self.cycles += 4
 
         # Fast-path: no interrupt pending or deferred
         if not (
@@ -217,9 +242,16 @@ class Z80CPU:
         ):
             if self.halted:
                 self._increment_r(1)
-                self.cycles += 4
+                # HALT executes NOPs, each taking 4 cycles
+                # We already added 4 for M1, so we're done for this step
                 return 4
         else:
+            # Interrupt pending.
+            # _step_interrupt will handle it.
+            # It returns the TOTAL cycles for the instruction/interrupt.
+            # Since we added 4 for M1, but the interrupt handler also includes M1,
+            # we need to subtract the 4 we added to avoid double counting.
+            self.cycles -= 4
             return self._step_interrupt(opcode, pc)
 
         # Dispatch pre-decoded opcode
@@ -233,18 +265,23 @@ class Z80CPU:
         self._increment_r(2 if is_prefixed else 1)
 
         # Call the handler directly, avoiding MicroOp.__call__ overhead
+        # Handler executes at T4 (after M1)
         op_cycles = op.handler(self)
 
         if not self._pc_modified:
             regs.PC = (pc + op.length) & 0xFFFF
 
-        self.cycles += op_cycles
+        # We already added 4 for M1, so add remaining cycles
+        # op_cycles includes M1, so we subtract 4
+        self.cycles += op_cycles - 4
         self.instruction_count += 1
         regs.UnresolvedPrefix = op.length == 1 and is_prefixed
 
         # Track if this was LD A,I or LD A,R for interrupt bug
         if opcode == 0xED:
-            next_byte = self._bus_read((pc + 1) & 0xFFFF, self.cycles)
+            # Read next byte at T4 (after M1)
+            # cycles is the T-state at the start of the instruction
+            next_byte = self._bus_read((pc + 1) & 0xFFFF, cycles + 4)
             self._is_ld_a_ir = next_byte in (0x57, 0x5F)
         else:
             self._is_ld_a_ir = False

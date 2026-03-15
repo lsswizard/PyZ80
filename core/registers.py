@@ -1,73 +1,128 @@
 """
 Z80 Register Set Module
+
+This module defines the Z80 register file, including both primary and shadow
+register sets, as well as special function registers.
+
+Z80 Register Overview:
+    - Primary: A, B, C, D, E, H, L, F (flag register)
+    - Shadow: A', B', C', D', E', H', L', F' (accessed via EX AF,AF' and EXX)
+    - Index: IX, IY (16-bit index registers)
+    - Stack: SP (stack pointer), PC (program counter)
+    - Special: I (interrupt vector), R (refresh counter)
+    - Control: IFF1, IFF2 (interrupt flip-flops), IM (interrupt mode)
 """
 
 from typing import Dict, Any
 
+
 class Registers:
     """
-    Z80 Register Set with fast access patterns.
+    Z80 register file with optimized property access.
+
+    Uses __slots__ for memory efficiency and faster attribute access.
+    Provides property-based access for 16-bit register combinations.
     """
 
     __slots__ = (
-        "A", "F", "B", "C", "D", "E", "H", "L",
-        "Ap", "Fp", "Bp", "Cp", "Dp", "Ep", "Hp", "Lp",
-        "IX", "IY", "SP", "PC", "I", "R",
-        "IFF1", "IFF2", "IM", "EI_PENDING", "EI_JUST_RESOLVED",
-        "UnresolvedPrefix", "Memptr",
+        "A",
+        "F",
+        "B",
+        "C",
+        "D",
+        "E",
+        "H",
+        "L",
+        "Ap",
+        "Fp",
+        "Bp",
+        "Cp",
+        "Dp",
+        "Ep",
+        "Hp",
+        "Lp",
+        "IX",
+        "IY",
+        "SP",
+        "PC",
+        "I",
+        "R",
+        "IFF1",
+        "IFF2",
+        "IM",
+        "EI_PENDING",
+        "EI_JUST_RESOLVED",
+        "UnresolvedPrefix",
+        "Memptr",
     )
 
     def __init__(self):
         self.reset()
 
     @property
-    def BC(self) -> int: return (self.B << 8) | self.C
+    def BC(self) -> int:
+        return (self.B << 8) | self.C
+
     @BC.setter
     def BC(self, value: int) -> None:
         self.B = (value >> 8) & 0xFF
         self.C = value & 0xFF
 
     @property
-    def DE(self) -> int: return (self.D << 8) | self.E
+    def DE(self) -> int:
+        return (self.D << 8) | self.E
+
     @DE.setter
     def DE(self, value: int) -> None:
         self.D = (value >> 8) & 0xFF
         self.E = value & 0xFF
 
     @property
-    def HL(self) -> int: return (self.H << 8) | self.L
+    def HL(self) -> int:
+        return (self.H << 8) | self.L
+
     @HL.setter
     def HL(self, value: int) -> None:
         self.H = (value >> 8) & 0xFF
         self.L = value & 0xFF
 
     @property
-    def AF(self) -> int: return (self.A << 8) | self.F
+    def AF(self) -> int:
+        return (self.A << 8) | self.F
+
     @AF.setter
     def AF(self, value: int) -> None:
         self.A = (value >> 8) & 0xFF
         self.F = value & 0xFF
 
     @property
-    def IXh(self) -> int: return (self.IX >> 8) & 0xFF
+    def IXh(self) -> int:
+        return (self.IX >> 8) & 0xFF
+
     @IXh.setter
     def IXh(self, value: int) -> None:
         self.IX = (self.IX & 0x00FF) | ((value & 0xFF) << 8)
 
     @property
-    def IXl(self) -> int: return self.IX & 0xFF
+    def IXl(self) -> int:
+        return self.IX & 0xFF
+
     @IXl.setter
     def IXl(self, value: int) -> None:
         self.IX = (self.IX & 0xFF00) | (value & 0xFF)
 
     @property
-    def IYh(self) -> int: return (self.IY >> 8) & 0xFF
+    def IYh(self) -> int:
+        return (self.IY >> 8) & 0xFF
+
     @IYh.setter
     def IYh(self, value: int) -> None:
         self.IY = (self.IY & 0x00FF) | ((value & 0xFF) << 8)
 
     @property
-    def IYl(self) -> int: return self.IY & 0xFF
+    def IYl(self) -> int:
+        return self.IY & 0xFF
+
     @IYl.setter
     def IYl(self, value: int) -> None:
         self.IY = (self.IY & 0xFF00) | (value & 0xFF)
@@ -107,13 +162,33 @@ class Registers:
 
     def get_state(self) -> Dict[str, Any]:
         return {
-            "A": self.A, "F": self.F, "B": self.B, "C": self.C,
-            "D": self.D, "E": self.E, "H": self.H, "L": self.L,
-            "Ap": self.Ap, "Fp": self.Fp, "Bp": self.Bp, "Cp": self.Cp,
-            "Dp": self.Dp, "Ep": self.Ep, "Hp": self.Hp, "Lp": self.Lp,
-            "IX": self.IX, "IY": self.IY, "SP": self.SP, "PC": self.PC,
-            "I": self.I, "R": self.R, "IFF1": self.IFF1, "IFF2": self.IFF2,
-            "IM": self.IM, "EI_PENDING": self.EI_PENDING, "Memptr": self.Memptr,
+            "A": self.A,
+            "F": self.F,
+            "B": self.B,
+            "C": self.C,
+            "D": self.D,
+            "E": self.E,
+            "H": self.H,
+            "L": self.L,
+            "Ap": self.Ap,
+            "Fp": self.Fp,
+            "Bp": self.Bp,
+            "Cp": self.Cp,
+            "Dp": self.Dp,
+            "Ep": self.Ep,
+            "Hp": self.Hp,
+            "Lp": self.Lp,
+            "IX": self.IX,
+            "IY": self.IY,
+            "SP": self.SP,
+            "PC": self.PC,
+            "I": self.I,
+            "R": self.R,
+            "IFF1": self.IFF1,
+            "IFF2": self.IFF2,
+            "IM": self.IM,
+            "EI_PENDING": self.EI_PENDING,
+            "Memptr": self.Memptr,
         }
 
     def set_state(self, state: Dict[str, Any]) -> None:
@@ -122,27 +197,41 @@ class Registers:
                 setattr(self, key, value)
 
     def get_reg16(self, pair: int) -> int:
-        if pair == 0: return self.BC
-        if pair == 1: return self.DE
-        if pair == 2: return self.HL
+        if pair == 0:
+            return self.BC
+        if pair == 1:
+            return self.DE
+        if pair == 2:
+            return self.HL
         return self.SP
 
     def set_reg16(self, pair: int, value: int) -> None:
         value &= 0xFFFF
-        if pair == 0: self.BC = value
-        elif pair == 1: self.DE = value
-        elif pair == 2: self.HL = value
-        else: self.SP = value
+        if pair == 0:
+            self.BC = value
+        elif pair == 1:
+            self.DE = value
+        elif pair == 2:
+            self.HL = value
+        else:
+            self.SP = value
 
     def get_reg16_push(self, pair: int) -> int:
-        if pair == 0: return self.BC
-        if pair == 1: return self.DE
-        if pair == 2: return self.HL
+        if pair == 0:
+            return self.BC
+        if pair == 1:
+            return self.DE
+        if pair == 2:
+            return self.HL
         return self.AF
 
     def set_reg16_push(self, pair: int, value: int) -> None:
         value &= 0xFFFF
-        if pair == 0: self.BC = value
-        elif pair == 1: self.DE = value
-        elif pair == 2: self.HL = value
-        else: self.AF = value
+        if pair == 0:
+            self.BC = value
+        elif pair == 1:
+            self.DE = value
+        elif pair == 2:
+            self.HL = value
+        else:
+            self.AF = value

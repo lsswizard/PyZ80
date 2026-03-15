@@ -1,3 +1,15 @@
+"""
+Z80 Bit Manipulation and Rotate Instructions
+
+This module implements bit operations and rotates:
+    - Rotate: RLC, RRC, RL, RR (register and memory)
+    - Shift: SLA, SRA, SLL (register and memory)
+    - Bit tests: BIT b,r, BIT b,(HL)
+    - Bit set: SET b,r, SET b,(HL)
+    - Bit reset: RES b,r, RES b,(HL)
+    - Register rotates: RLCA, RRCA, RLA, RRA
+"""
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -177,9 +189,10 @@ def rlc_hl(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     carry = (value >> 7) & 1
     result = ((value << 1) | carry) & 0xFF
-    cpu._bus_write(addr, result, cycles)
+    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -213,9 +226,10 @@ def rrc_hl(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     carry = value & 1
     result = ((value >> 1) | (carry << 7)) & 0xFF
-    cpu._bus_write(addr, result, cycles)
+    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -250,10 +264,11 @@ def rl_hl(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     old_carry = regs.F & FLAG_C
     new_carry = (value >> 7) & 1
     result = ((value << 1) | old_carry) & 0xFF
-    cpu._bus_write(addr, result, cycles)
+    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -288,10 +303,11 @@ def rr_hl(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     old_carry = (regs.F & FLAG_C) << 7
     new_carry = value & 1
     result = ((value >> 1) | old_carry) & 0xFF
-    cpu._bus_write(addr, result, cycles)
+    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -325,9 +341,10 @@ def sla_hl(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     carry = (value >> 7) & 1
     result = (value << 1) & 0xFF
-    cpu._bus_write(addr, result, cycles)
+    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -361,9 +378,10 @@ def sra_hl(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     carry = value & 1
     result = ((value >> 1) | (value & 0x80)) & 0xFF
-    cpu._bus_write(addr, result, cycles)
+    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -397,9 +415,10 @@ def sll_hl(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     carry = (value >> 7) & 1
     result = ((value << 1) | 1) & 0xFF
-    cpu._bus_write(addr, result, cycles)
+    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -433,9 +452,10 @@ def srl_hl(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     carry = value & 1
     result = (value >> 1) & 0xFF
-    cpu._bus_write(addr, result, cycles)
+    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -490,6 +510,7 @@ def set_n_hl(cpu: "Z80CPU", bit: int) -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     cpu._bus_write(addr, value | (1 << bit), cycles)
     return 15
 
@@ -507,6 +528,7 @@ def res_n_hl(cpu: "Z80CPU", bit: int) -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     cpu._bus_write(addr, value & ~(1 << bit), cycles)
     return 15
 

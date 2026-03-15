@@ -27,14 +27,6 @@ class MicroOp:
         return self.handler(cpu)
 
 
-@dataclass
-class PrefixedMicroOp(MicroOp):
-    """Extended micro-op for prefixed instructions (CB, ED, DD, FD)"""
-
-    prefix: int = 0
-    displacement: int = 0
-
-
 # =============================================================================
 # Fast Memory Access Helpers
 # =============================================================================
@@ -65,12 +57,12 @@ def read_word(mem: Any, addr: int, cpu: Any = None) -> int:
         low = cpu.read_byte(addr)
         high = cpu.read_byte((addr + 1) & 0xFFFF)
         return low | (high << 8)
-    
+
     if hasattr(mem, "read_byte"):
         low = mem.read_byte(addr & 0xFFFF, 0)
         high = mem.read_byte((addr + 1) & 0xFFFF, 0)
         return low | (high << 8)
-        
+
     addr &= 0xFFFF
     return mem[addr] | (mem[(addr + 1) & 0xFFFF] << 8)
 

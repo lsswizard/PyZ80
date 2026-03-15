@@ -1,19 +1,25 @@
 """
 Z80 Instruction Decoder Module
-Pre-decodes instructions into MicroOps for fast execution.
 
-Note on DDCB/FDCB instructions:
-    These indexed bit operations (DDCB/FDCB prefixes) require special handling
-    because they operate on (IX+d)/(IY+d) instead of (HL), and they have
-    an additional displacement byte. The CB opcode's low 3 bits determine
-    whether the result is also stored in a register (undocumented Z80 behavior).
+This module handles the decoding of Z80 opcodes into executable MicroOps.
+It implements a pre-decoding strategy with caching for optimal performance.
 
-    Format: DD CB d cb  (4 bytes)
-            FD CB d cb  (4 bytes)
+Opcode Tables:
+    - Base: Standard Z80 instructions (0x00-0xFF)
+    - CB: Bit manipulation instructions (0xCB prefix)
+    - ED: Extended instructions (0xED prefix)
+    - DD: IX register instructions (0xDD prefix)
+    - FD: IY register instructions (0xFD prefix)
 
-    Where:
-    - d is the signed displacement byte
-    - cb is the CB opcode determining the operation and target register
+Special Handling:
+    DDCB/FDCB instructions (indexed bit operations) require special treatment:
+    - They operate on (IX+d)/(IY+d) instead of (HL)
+    - Format: DD CB d cb (4 bytes) or FD CB d cb (4 bytes)
+    - d = signed displacement byte (-128 to +127)
+    - cb = CB opcode determining operation and target register
+
+    Undocumented Z80 behavior: The CB opcode's low 3 bits determine if the
+    result is also stored in a register (e.g., RLC (IX+d), B stores result in B).
 """
 
 from typing import Optional

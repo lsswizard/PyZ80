@@ -1,17 +1,32 @@
 """
-Z80 Flag and Arithmetic Tables
-Precomputed flag tables for fast Z80 emulation.
+Z80 Flag Computation Module
+
+This module provides flag calculation functions for Z80 arithmetic and logic
+operations. It includes precomputed parity tables for performance.
+
+Z80 Flag Layout (F register):
+    Bit 7: S - Sign flag (1 if result is negative)
+    Bit 6: Z - Zero flag (1 if result is zero)
+    Bit 5: F5 - Undocumented (copy of bit 5 of result)
+    Bit 4: H - Half Carry flag (carry from bit 3 to bit 4)
+    Bit 3: F3 - Undocumented (copy of bit 3 of result)
+    Bit 2: P/V - Parity/Overflow flag
+    Bit 1: N - Add/Subtract flag (0 after ADD, 1 after SUB)
+    Bit 0: C - Carry flag
 """
 
-FLAG_S = 0x80  # Sign
-FLAG_Z = 0x40  # Zero
-FLAG_F5 = 0x20  # undocumented (copy of bit 5)
-FLAG_H = 0x10  # Half Carry
-FLAG_F3 = 0x08  # undocumented (copy of bit 3)
+# Flag bit definitions
+FLAG_S = 0x80  # Sign (negative result)
+FLAG_Z = 0x40  # Zero (result is zero)
+FLAG_F5 = 0x20  # Undocumented: copy of bit 5
+FLAG_H = 0x10  # Half Carry (carry from bit 3)
+FLAG_F3 = 0x08  # Undocumented: copy of bit 3
 FLAG_PV = 0x04  # Parity/Overflow
-FLAG_N = 0x02  # Add/Subtract
-FLAG_C = 0x01  # Carry
+FLAG_N = 0x02  # Add/Subtract (1 = subtraction)
+FLAG_C = 0x01  # Carry flag
 
+# Precomputed parity table for performance
+# PARITY_TABLE[n] = 1 if n has even parity, 0 if odd
 PARITY_TABLE = bytearray(256)
 
 for i in range(256):
@@ -24,7 +39,7 @@ for i in range(256):
 
 
 def parity(n: int) -> int:
-    """Calculate parity of 8-bit value (1 = even, 0 = odd)"""
+    """Calculate parity of 8-bit value (1 = even parity, 0 = odd parity)."""
     return PARITY_TABLE[n & 0xFF]
 
 

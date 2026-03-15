@@ -1,15 +1,15 @@
 """
 Z80 Core Module
-High-performance Z80 CPU emulation core.
+
+This package provides a cycle-exact Z80 CPU emulator.
 
 Exports:
-- Z80CPU: Main CPU class
-- Registers: Register set class
-- CPUState: State snapshot class
-- StateManager: State history manager
-- InstructionDecoder: Opcode decoder
-- MicroOp: Pre-decoded instruction
-- Z80Bus: Bus protocol interface
+    - Z80CPU: Main CPU class
+    - Registers: Register file
+    - InstructionDecoder: Opcode decoder with caching
+    - MicroOp: Pre-decoded instruction
+    - Z80Bus: Bus interface protocol
+    - SimpleBus: Basic memory implementation
 """
 
 from .cpu import Z80CPU
@@ -17,8 +17,15 @@ from .registers import Registers
 from .bus import Z80Bus, SimpleBus
 from .state import CPUState, StateManager
 from .decoder import InstructionDecoder
-from .primitives import MicroOp, PrefixedMicroOp
-from .primitives import read_byte, read_word, write_byte, write_word, push_word, pop_word
+from .primitives import MicroOp
+from .primitives import (
+    read_byte,
+    read_word,
+    write_byte,
+    write_word,
+    push_word,
+    pop_word,
+)
 
 __all__ = [
     "Z80CPU",
@@ -27,7 +34,6 @@ __all__ = [
     "StateManager",
     "InstructionDecoder",
     "MicroOp",
-    "PrefixedMicroOp",
     "Z80Bus",
     "SimpleBus",
     "read_byte",

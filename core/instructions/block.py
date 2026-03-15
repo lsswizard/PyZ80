@@ -1,3 +1,14 @@
+"""
+Z80 Block Transfer and I/O Instructions
+
+This module implements block data transfer and I/O operations:
+    - Block transfers: LDI, LDD, LDIR, LDDR
+    - Block comparisons: CPI, CPD, CPIR, CPDR
+    - Block I/O: INI, IND, INIR, INIR, OUTI, OUTD, OTIR, OTDR
+    - Rotates: RLD, RRD (digit rotate)
+    - Direct I/O: IN A,(n), OUT (n),A, IN r,(C), OUT (C),r
+"""
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,7 +41,9 @@ def ldi(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles)
-    cpu._bus_write(regs.DE, value, cycles)
+    cpu.advance_cycles(3)
+    cpu.advance_cycles(3)
+    cpu._bus_write(regs.DE, value, cpu.cycles)
     regs.HL = (regs.HL + 1) & 0xFFFF
     regs.DE = (regs.DE + 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
@@ -52,7 +65,9 @@ def ldd(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles)
-    cpu._bus_write(regs.DE, value, cycles)
+    cpu.advance_cycles(3)
+    cpu.advance_cycles(3)
+    cpu._bus_write(regs.DE, value, cpu.cycles)
     regs.HL = (regs.HL - 1) & 0xFFFF
     regs.DE = (regs.DE - 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
@@ -74,6 +89,7 @@ def cpi(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles)
+    cpu.advance_cycles(3)
     result = (regs.A - value) & 0xFF
     regs.HL = (regs.HL + 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
@@ -161,7 +177,8 @@ def ini(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_io_read(regs.BC, cycles)
-    cpu._bus_write(regs.HL, value, cycles)
+    cpu.advance_cycles(3)
+    cpu._bus_write(regs.HL, value, cpu.cycles)
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
     regs.HL = (regs.HL + 1) & 0xFFFF
@@ -184,7 +201,8 @@ def ind(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_io_read(regs.BC, cycles)
-    cpu._bus_write(regs.HL, value, cycles)
+    cpu.advance_cycles(3)
+    cpu._bus_write(regs.HL, value, cpu.cycles)
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
     regs.HL = (regs.HL - 1) & 0xFFFF
@@ -207,14 +225,12 @@ def outi(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles)
+    cpu.advance_cycles(3)
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
-    cpu._bus_io_write(regs.BC, value, cycles)
+    cpu._bus_io_write(regs.BC, value, cpu.cycles)
     regs.HL = (regs.HL + 1) & 0xFFFF
     _compute_in_out_flags(regs, old_b, regs.B)
-    return 16
-    if old_b == 0x80:
-        regs.F |= FLAG_PV
     return 16
 
 
@@ -233,9 +249,10 @@ def outd(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles)
+    cpu.advance_cycles(3)
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
-    cpu._bus_io_write(regs.BC, value, cycles)
+    cpu._bus_io_write(regs.BC, value, cpu.cycles)
     regs.HL = (regs.HL - 1) & 0xFFFF
     _compute_in_out_flags(regs, old_b, regs.B)
     return 16
@@ -256,8 +273,9 @@ def in_a_n(cpu: "Z80CPU") -> int:
     pc = cpu.regs.PC
     cycles = cpu.cycles
     port = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    cpu.advance_cycles(3)
     addr = (cpu.regs.A << 8) | port
-    cpu.regs.A = cpu._bus_io_read(addr, cycles)
+    cpu.regs.A = cpu._bus_io_read(addr, cpu.cycles)
     return 11
 
 
@@ -266,8 +284,9 @@ def out_n_a(cpu: "Z80CPU") -> int:
     pc = cpu.regs.PC
     cycles = cpu.cycles
     port = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    cpu.advance_cycles(3)
     addr = (cpu.regs.A << 8) | port
-    cpu._bus_io_write(addr, cpu.regs.A, cycles)
+    cpu._bus_io_write(addr, cpu.regs.A, cpu.cycles)
     return 11
 
 
@@ -367,12 +386,13 @@ def rld(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles)
+    cpu.advance_cycles(3)
     low_nibble = value & 0x0F
     high_nibble = value & 0xF0
     a_low = regs.A & 0x0F
     new_value = (low_nibble << 4) | a_low
     new_a = (regs.A & 0xF0) | (high_nibble >> 4)
-    cpu._bus_write(regs.HL, new_value, cycles)
+    cpu._bus_write(regs.HL, new_value, cpu.cycles)
     regs.A = new_a
     regs.F = regs.F & FLAG_C
     if regs.A == 0:
@@ -390,12 +410,13 @@ def rrd(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles)
+    cpu.advance_cycles(3)
     low_nibble = value & 0x0F
     high_nibble = value & 0xF0
     a_low = regs.A & 0x0F
     new_value = (a_low << 4) | (high_nibble >> 4)
     new_a = (regs.A & 0xF0) | low_nibble
-    cpu._bus_write(regs.HL, new_value, cycles)
+    cpu._bus_write(regs.HL, new_value, cpu.cycles)
     regs.A = new_a
     regs.F = regs.F & FLAG_C
     if regs.A == 0:

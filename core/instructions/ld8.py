@@ -1,3 +1,14 @@
+"""
+Z80 Load Instructions
+
+This module implements all LD (Load) instructions:
+    - 8-bit loads: LD r,r', LD r,n, LD r,(HL), LD (HL),r, LD (HL),n
+    - 16-bit loads: LD rr,nn, LD (nn),HL, LD HL,(nn)
+    - Special: LD A,(BC/DE/nn), LD (BC/DE/nn),A
+    - Indexed: LD r,(IX+d), LD (IX+d),r, LD (IX+d),n
+    - Registers: LD A,I, LD A,R, LD I,A, LD R,A
+"""
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -9,7 +20,9 @@ def _read_addr_from_pc(cpu: "Z80CPU", offset: int = 1) -> int:
     pc = cpu.regs.PC
     cycles = cpu.cycles
     low = cpu._bus_read((pc + offset) & 0xFFFF, cycles)
-    high = cpu._bus_read((pc + offset + 1) & 0xFFFF, cycles)
+    cpu.advance_cycles(3)
+    high = cpu._bus_read((pc + offset + 1) & 0xFFFF, cycles + 3)
+    cpu.advance_cycles(6)
     return low | (high << 8)
 
 
@@ -24,6 +37,7 @@ def _get_indexed_addr(cpu: "Z80CPU", is_iy: bool, offset_pos: int = 2) -> int:
     base = cpu.regs.IY if is_iy else cpu.regs.IX
     addr = (base + disp) & 0xFFFF
     cpu.regs.Memptr = addr
+    cpu.advance_cycles(3)
     return addr
 
 
@@ -57,6 +71,7 @@ def ld_hl_r(cpu: "Z80CPU", src: int) -> int:
 def ld_hl_n(cpu: "Z80CPU") -> int:
     """LD (HL),n - Store immediate to memory (10 T-states)"""
     value = cpu._bus_read((cpu.regs.PC + 1) & 0xFFFF, cpu.cycles)
+    cpu.advance_cycles(3)
     cpu._bus_write(cpu.regs.HL, value, cpu.cycles)
     return 10
 
@@ -82,6 +97,7 @@ def ld_a_nn(cpu: "Z80CPU") -> int:
     addr = _read_addr_from_pc(cpu, 1)
     cycles = cpu.cycles
     cpu.regs.A = cpu._bus_read(addr, cycles)
+    cpu.advance_cycles(3)
     cpu.regs.Memptr = (addr + 1) & 0xFFFF
     return 13
 
@@ -107,6 +123,7 @@ def ld_nn_a(cpu: "Z80CPU") -> int:
     addr = _read_addr_from_pc(cpu, 1)
     cycles = cpu.cycles
     cpu._bus_write(addr, cpu.regs.A, cycles)
+    cpu.advance_cycles(3)
     cpu.regs.Memptr = ((cpu.regs.A << 8) | ((addr + 1) & 0xFF)) & 0xFFFF
     return 13
 
@@ -167,6 +184,7 @@ def ld_ixd_n(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """LD (IX/IY+d),n (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
     value = cpu._bus_read((cpu.regs.PC + 3) & 0xFFFF, cpu.cycles)
+    cpu.advance_cycles(3)
     cpu._bus_write(addr, value, cpu.cycles)
     return 19
 

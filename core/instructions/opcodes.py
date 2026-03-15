@@ -494,6 +494,11 @@ def _build_ed_opcode_table():
     ED_OPCODE_TABLE[0x6F] = (rld, 18, 2, "RLD")
     ED_OPCODE_TABLE[0x67] = (rrd, 18, 2, "RRD")
 
+    # Undefined ED opcodes - treat as NOPs with 8 cycles
+    for op in range(0x00, 0x100):
+        if op not in ED_OPCODE_TABLE:
+            ED_OPCODE_TABLE[op] = (nop, 8, 2, f"NOP* (ED {op:02X})")
+
 
 def _build_dd_opcode_table():
     global DD_OPCODE_TABLE

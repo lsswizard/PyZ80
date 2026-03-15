@@ -1,3 +1,16 @@
+"""
+Z80 Jump and Call Instructions
+
+This module implements all control flow instructions:
+    - Absolute jumps: JP nn, JP cc,nn
+    - Relative jumps: JR e, JR cc,e
+    - Indexed jumps: JP (HL), JP (IX), JP (IY)
+    - Loop: DJNZ e
+    - Subroutines: CALL nn, CALL cc,nn, RET, RET cc
+    - Restarts: RST p
+    - Returns from interrupt: RETI, RETN
+"""
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -28,6 +41,7 @@ def jr_e(cpu: "Z80CPU") -> int:
     cycles = cpu.cycles
     offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
     offset = offset if offset < 128 else offset - 256
+    cpu.advance_cycles(3)
     cpu.regs.PC = (pc + 2 + offset) & 0xFFFF
     cpu._pc_modified = True
     return 12
@@ -40,6 +54,7 @@ def jr_cc_e(cpu: "Z80CPU", condition: int) -> int:
         cycles = cpu.cycles
         offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
         offset = offset if offset < 128 else offset - 256
+        cpu.advance_cycles(3)
         cpu.regs.PC = (pc + 2 + offset) & 0xFFFF
         cpu._pc_modified = True
         return 12
@@ -62,6 +77,7 @@ def djnz_e(cpu: "Z80CPU") -> int:
         cycles = cpu.cycles
         offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
         offset = offset if offset < 128 else offset - 256
+        cpu.advance_cycles(3)
         regs.PC = (pc + 2 + offset) & 0xFFFF
         cpu._pc_modified = True
         return 13

@@ -1,3 +1,13 @@
+"""
+Z80 16-bit Arithmetic Instructions
+
+This module implements 16-bit arithmetic operations:
+    - Addition: ADD HL,rr, ADD IX,rr, ADD IY,rr
+    - Addition with carry: ADC HL,rr, SBC HL,rr
+    - Increment: INC rr, INC IX, INC IY
+    - Decrement: DEC rr, DEC IX, DEC IY
+"""
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
