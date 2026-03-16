@@ -1,6 +1,6 @@
 # PyZ80 - Cycle-Exact Z80 Emulator
 
-A high-performance, cycle-exact Z80 CPU emulator written in Python.
+A high-performance, cycle-exact Z80 CPU emulator written in Python with Numba JIT acceleration.
 
 ## Features
 
@@ -8,7 +8,15 @@ A high-performance, cycle-exact Z80 CPU emulator written in Python.
 - **Complete Instruction Set**: All 256 base opcodes + CB/ED/DD/FD prefixes
 - **Cycle-Accurate Interrupts**: NMI and maskable interrupt handling
 - **Pre-decoded Cache**: Optimized instruction execution with 64KB decode cache
+- **Numba JIT Acceleration**: Flag calculations compiled to native code
+- **Lookup Table Optimization**: Spyccy-style SZ/SZP flag tables
 - **Clean Architecture**: Machine-independent design via Z80Bus protocol
+
+## Installation
+
+```bash
+pip install PyZ80
+```
 
 ## Quick Start
 
@@ -72,6 +80,25 @@ if cpu.interrupt_pending:
     cpu.handle_interrupt()
 ```
 
+### Memory Helpers
+
+The CPU provides helper methods for 16-bit operations:
+
+```python
+# Read/write 16-bit values
+addr = 0x8000
+value = cpu.read16(addr)  # Little-endian
+cpu.write16(addr, value)
+
+# Stack operations
+cpu.push16(0x1234)
+value = cpu.pop16()
+
+# Call/Return helpers
+new_pc = cpu.call(0x1000)
+return_pc = cpu.ret()
+```
+
 ## Testing
 
 Run the validation suite:
@@ -88,9 +115,17 @@ pytest tests/test_validate_z80.py::TestTiming -v
 
 ## Performance Notes
 
-- Pre-decoded instruction cache eliminates decode overhead
-- Local attribute caching in hot paths
-- Minimal object allocation during execution
+- **Numba JIT**: Flag calculations compiled to native code (~1.5M instr/sec)
+- **Lookup Tables**: SZ/SZP tables for fast flag calculation
+- **Pre-decoded Cache**: Eliminates decode overhead
+- **Local Attribute Caching**: Hot paths optimized
+- **Minimal Allocations**: No object allocation during execution
+
+## Dependencies
+
+- `numpy>=2.4.3` - Array storage for lookup tables
+- `numba>=0.60.0` - JIT compilation for flag calculations
+- `pytest>=9.0.2` - Testing framework
 
 ## References
 

@@ -115,6 +115,49 @@ class Z80CPU:
         self.bus.bus_write(addr, value, cycles)
         self.decoder.invalidate_cache(addr)
 
+    # -------------------------------------------------------------------------
+    # Spyccy-style Memory Helper Methods
+    # -------------------------------------------------------------------------
+
+    def read16(self, addr: int) -> int:
+        """Read 16-bit value from memory (little-endian)."""
+        lo = self._bus_read(addr, self.cycles)
+        hi = self._bus_read((addr + 1) & 0xFFFF, self.cycles + 1)
+        return hi << 8 | lo
+
+    def write16(self, addr: int, value: int) -> None:
+        """Write 16-bit value to memory (little-endian)."""
+        self._bus_write(addr, value & 0xFF, self.cycles)
+        self._bus_write((addr + 1) & 0xFFFF, (value >> 8) & 0xFF, self.cycles + 1)
+
+    def push16(self, value: int) -> int:
+        """Push 16-bit value onto stack. Returns new SP."""
+        sp = (self.regs.SP - 2) & 0xFFFF
+        self._bus_write(sp, value & 0xFF, self.cycles)
+        self._bus_write((sp + 1) & 0xFFFF, (value >> 8) & 0xFF, self.cycles + 1)
+        self.regs.SP = sp
+        return sp
+
+    def pop16(self) -> int:
+        """Pop 16-bit value from stack. Returns value and advances SP."""
+        sp = self.regs.SP
+        lo = self._bus_read(sp, self.cycles)
+        hi = self._bus_read((sp + 1) & 0xFFFF, self.cycles + 1)
+        self.regs.SP = (sp + 2) & 0xFFFF
+        return hi << 8 | lo
+
+    def call(self, pc: int) -> int:
+        """Execute CALL: push PC and jump to target. Returns new PC."""
+        lo = self._bus_read(pc, self.cycles)
+        hi = self._bus_read((pc + 1) & 0xFFFF, self.cycles + 1)
+        target = hi << 8 | lo
+        self.push16((pc + 3) & 0xFFFF)
+        return target
+
+    def ret(self) -> int:
+        """Execute RET: pop PC from stack. Returns new PC."""
+        return self.pop16()
+
     def fetch_byte(self) -> int:
         """Fetch opcode byte and increment PC."""
         pc = self.regs.PC

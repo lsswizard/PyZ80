@@ -4,11 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PyZ80"
-version = "1.1.0"
-description = "Python Z80 Emulation"
+version = "1.2.0"
+description = "Python Z80 Emulation with Numba JIT acceleration"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "numpy>=2.4.3",
+    "numba>=0.60.0",
     "pytest>=9.0.2",
 ]
+keywords = ["z80", "emulator", "cpu", "retro", "jit", "numba"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Emulators",
+]
+
