@@ -273,10 +273,10 @@ def inc_hl(cpu: "Z80CPU") -> int:
     """INC (HL) - Increment memory (11 T-states)"""
     addr = cpu.regs.HL
     cycles = cpu.cycles
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
+    value = cpu._bus_read(addr, cycles + 1)
     new_value = (value + 1) & 0xFF
-    cpu._bus_write(addr, new_value, cpu.cycles)
+    cpu._bus_write(addr, new_value, cycles + 4)
+    cpu.cycles += 11
     cpu.regs.F = (cpu.regs.F & FLAG_C) | get_inc_flags(value)
     return 11
 
@@ -294,10 +294,10 @@ def dec_hl(cpu: "Z80CPU") -> int:
     """DEC (HL) - Decrement memory (11 T-states)"""
     addr = cpu.regs.HL
     cycles = cpu.cycles
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
+    value = cpu._bus_read(addr, cycles + 1)
     new_value = (value - 1) & 0xFF
-    cpu._bus_write(addr, new_value, cpu.cycles)
+    cpu._bus_write(addr, new_value, cycles + 4)
+    cpu.cycles += 11
     cpu.regs.F = (cpu.regs.F & FLAG_C) | get_dec_flags(value)
     return 11
 
@@ -570,10 +570,10 @@ def inc_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """INC (IX/IY+d) (23 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
     cycles = cpu.cycles
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
+    value = cpu._bus_read(addr, cycles + 4)
     new_value = (value + 1) & 0xFF
-    cpu._bus_write(addr, new_value, cpu.cycles)
+    cpu._bus_write(addr, new_value, cycles + 7)
+    cpu.cycles += 23
     cpu.regs.F = (cpu.regs.F & FLAG_C) | get_inc_flags(value)
     return 23
 
@@ -608,9 +608,9 @@ def dec_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """DEC (IX/IY+d) (23 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
     cycles = cpu.cycles
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
+    value = cpu._bus_read(addr, cycles + 4)
     new_value = (value - 1) & 0xFF
-    cpu._bus_write(addr, new_value, cpu.cycles)
+    cpu._bus_write(addr, new_value, cycles + 7)
+    cpu.cycles += 23
     cpu.regs.F = (cpu.regs.F & FLAG_C) | get_dec_flags(value)
     return 23

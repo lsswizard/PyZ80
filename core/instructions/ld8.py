@@ -19,10 +19,9 @@ def _read_addr_from_pc(cpu: "Z80CPU", offset: int = 1) -> int:
     """Read 16-bit address from PC at given offset (little-endian)."""
     pc = cpu.regs.PC
     cycles = cpu.cycles
-    low = cpu._bus_read((pc + offset) & 0xFFFF, cycles)
-    cpu.advance_cycles(3)
-    high = cpu._bus_read((pc + offset + 1) & 0xFFFF, cycles + 3)
-    cpu.advance_cycles(6)
+    low = cpu._bus_read((pc + offset) & 0xFFFF, cycles + 1)
+    high = cpu._bus_read((pc + offset + 1) & 0xFFFF, cycles + 4)
+    cpu.cycles += 7
     return low | (high << 8)
 
 
@@ -32,12 +31,12 @@ def _get_indexed_addr(cpu: "Z80CPU", is_iy: bool, offset_pos: int = 2) -> int:
     """
     pc = cpu.regs.PC
     cycles = cpu.cycles
-    displacement = cpu._bus_read((pc + offset_pos) & 0xFFFF, cycles)
+    displacement = cpu._bus_read((pc + offset_pos) & 0xFFFF, cycles + 1)
     disp = displacement if displacement < 128 else displacement - 256
     base = cpu.regs.IY if is_iy else cpu.regs.IX
     addr = (base + disp) & 0xFFFF
     cpu.regs.Memptr = addr
-    cpu.advance_cycles(3)
+    cpu.cycles += 4
     return addr
 
 
@@ -70,9 +69,9 @@ def ld_hl_r(cpu: "Z80CPU", src: int) -> int:
 
 def ld_hl_n(cpu: "Z80CPU") -> int:
     """LD (HL),n - Store immediate to memory (10 T-states)"""
-    value = cpu._bus_read((cpu.regs.PC + 1) & 0xFFFF, cpu.cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write(cpu.regs.HL, value, cpu.cycles)
+    value = cpu._bus_read((cpu.regs.PC + 1) & 0xFFFF, cpu.cycles + 1)
+    cpu._bus_write(cpu.regs.HL, value, cpu.cycles + 4)
+    cpu.cycles += 10
     return 10
 
 
@@ -96,8 +95,8 @@ def ld_a_nn(cpu: "Z80CPU") -> int:
     """LD A,(nn) - Load A from 16-bit address (13 T-states)"""
     addr = _read_addr_from_pc(cpu, 1)
     cycles = cpu.cycles
-    cpu.regs.A = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
+    cpu.regs.A = cpu._bus_read(addr, cycles + 3)
+    cpu.cycles += 13
     cpu.regs.Memptr = (addr + 1) & 0xFFFF
     return 13
 
@@ -122,8 +121,8 @@ def ld_nn_a(cpu: "Z80CPU") -> int:
     """LD (nn),A - Store A to 16-bit address (13 T-states)"""
     addr = _read_addr_from_pc(cpu, 1)
     cycles = cpu.cycles
-    cpu._bus_write(addr, cpu.regs.A, cycles)
-    cpu.advance_cycles(3)
+    cpu._bus_write(addr, cpu.regs.A, cycles + 3)
+    cpu.cycles += 13
     cpu.regs.Memptr = ((cpu.regs.A << 8) | ((addr + 1) & 0xFF)) & 0xFFFF
     return 13
 
@@ -169,43 +168,45 @@ def ld_r_a(cpu: "Z80CPU") -> int:
 def ld_r_ixd(cpu: "Z80CPU", dest: int, is_iy: bool = False) -> int:
     """LD r,(IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cpu.set_reg8(dest, cpu._bus_read(addr, cpu.cycles))
+    cpu.set_reg8(dest, cpu._bus_read(addr, cpu.cycles + 4))
     return 19
 
 
 def ld_ixd_r(cpu: "Z80CPU", src: int, is_iy: bool = False) -> int:
     """LD (IX/IY+d),r (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cpu._bus_write(addr, cpu.get_reg8(src), cpu.cycles)
+    cpu._bus_write(addr, cpu.get_reg8(src), cpu.cycles + 4)
     return 19
 
 
 def ld_ixd_n(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """LD (IX/IY+d),n (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    value = cpu._bus_read((cpu.regs.PC + 3) & 0xFFFF, cpu.cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write(addr, value, cpu.cycles)
+    value = cpu._bus_read((cpu.regs.PC + 3) & 0xFFFF, cpu.cycles + 4)
+    cpu._bus_write(addr, value, cpu.cycles + 7)
+    cpu.cycles += 19
     return 19
 
 
 def ld_ixh_n(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """LD IXH/IYH,n (11 T-states)"""
-    value = cpu._bus_read((cpu.regs.PC + 2) & 0xFFFF, cpu.cycles)
+    value = cpu._bus_read((cpu.regs.PC + 2) & 0xFFFF, cpu.cycles + 1)
     if is_iy:
         cpu.regs.IYh = value
     else:
         cpu.regs.IXh = value
+    cpu.cycles += 11
     return 11
 
 
 def ld_ixl_n(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """LD IXL/IYL,n (11 T-states)"""
-    value = cpu._bus_read((cpu.regs.PC + 2) & 0xFFFF, cpu.cycles)
+    value = cpu._bus_read((cpu.regs.PC + 2) & 0xFFFF, cpu.cycles + 1)
     if is_iy:
         cpu.regs.IYl = value
     else:
         cpu.regs.IXl = value
+    cpu.cycles += 11
     return 11
 
 

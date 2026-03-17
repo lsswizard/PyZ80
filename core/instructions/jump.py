@@ -39,9 +39,9 @@ def jr_e(cpu: "Z80CPU") -> int:
     """JR e - Relative jump (12 T-states)"""
     pc = cpu.regs.PC
     cycles = cpu.cycles
-    offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+    offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles + 1)
     offset = offset if offset < 128 else offset - 256
-    cpu.advance_cycles(3)
+    cpu.cycles += 12
     cpu.regs.PC = (pc + 2 + offset) & 0xFFFF
     cpu._pc_modified = True
     return 12
@@ -52,9 +52,9 @@ def jr_cc_e(cpu: "Z80CPU", condition: int) -> int:
     if cpu.check_condition(condition):
         pc = cpu.regs.PC
         cycles = cpu.cycles
-        offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+        offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles + 1)
         offset = offset if offset < 128 else offset - 256
-        cpu.advance_cycles(3)
+        cpu.cycles += 12
         cpu.regs.PC = (pc + 2 + offset) & 0xFFFF
         cpu._pc_modified = True
         return 12
@@ -75,9 +75,9 @@ def djnz_e(cpu: "Z80CPU") -> int:
     if regs.B != 0:
         pc = regs.PC
         cycles = cpu.cycles
-        offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
+        offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles + 1)
         offset = offset if offset < 128 else offset - 256
-        cpu.advance_cycles(3)
+        cpu.cycles += 13
         regs.PC = (pc + 2 + offset) & 0xFFFF
         cpu._pc_modified = True
         return 13

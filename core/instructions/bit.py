@@ -23,6 +23,12 @@ from ..flags import (
     FLAG_S,
     FLAG_Z,
     PARITY_TABLE,
+    ROT_RESULT,
+    ROT_CARRY,
+    RL_CARRY_0,
+    RL_CARRY_1,
+    RR_CARRY_0,
+    RR_CARRY_1,
 )
 from .ld8 import _get_indexed_addr
 
@@ -170,9 +176,9 @@ def rlc_r(cpu: "Z80CPU", dest: int) -> int:
     """RLC r - Rotate left circular (8 T-states)"""
     regs = cpu.regs
     value = cpu.get_reg8(dest)
-    carry = (value >> 7) & 1
-    result = ((value << 1) | carry) & 0xFF
+    result = ROT_RESULT[0][value]
     cpu.set_reg8(dest, result)
+    carry = ROT_CARRY[0][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -188,11 +194,11 @@ def rlc_hl(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    carry = (value >> 7) & 1
-    result = ((value << 1) | carry) & 0xFF
-    cpu._bus_write(addr, result, cpu.cycles)
+    value = cpu._bus_read(addr, cycles + 1)
+    result = ROT_RESULT[0][value]
+    cpu._bus_write(addr, result, cycles + 4)
+    cpu.cycles += 15
+    carry = ROT_CARRY[0][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -207,9 +213,9 @@ def rrc_r(cpu: "Z80CPU", dest: int) -> int:
     """RRC r - Rotate right circular (8 T-states)"""
     regs = cpu.regs
     value = cpu.get_reg8(dest)
-    carry = value & 1
-    result = ((value >> 1) | (carry << 7)) & 0xFF
+    result = ROT_RESULT[1][value]
     cpu.set_reg8(dest, result)
+    carry = ROT_CARRY[1][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -225,11 +231,11 @@ def rrc_hl(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    carry = value & 1
-    result = ((value >> 1) | (carry << 7)) & 0xFF
-    cpu._bus_write(addr, result, cpu.cycles)
+    value = cpu._bus_read(addr, cycles + 1)
+    result = ROT_RESULT[1][value]
+    cpu._bus_write(addr, result, cycles + 4)
+    cpu.cycles += 15
+    carry = ROT_CARRY[1][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -245,9 +251,9 @@ def rl_r(cpu: "Z80CPU", dest: int) -> int:
     regs = cpu.regs
     value = cpu.get_reg8(dest)
     old_carry = regs.F & FLAG_C
-    new_carry = (value >> 7) & 1
-    result = ((value << 1) | old_carry) & 0xFF
+    result = RL_CARRY_1[value] if old_carry else RL_CARRY_0[value]
     cpu.set_reg8(dest, result)
+    new_carry = (value >> 7) & 1
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -263,12 +269,12 @@ def rl_hl(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
+    value = cpu._bus_read(addr, cycles + 1)
     old_carry = regs.F & FLAG_C
+    result = RL_CARRY_1[value] if old_carry else RL_CARRY_0[value]
+    cpu._bus_write(addr, result, cycles + 4)
+    cpu.cycles += 15
     new_carry = (value >> 7) & 1
-    result = ((value << 1) | old_carry) & 0xFF
-    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -283,10 +289,10 @@ def rr_r(cpu: "Z80CPU", dest: int) -> int:
     """RR r - Rotate right through carry (8 T-states)"""
     regs = cpu.regs
     value = cpu.get_reg8(dest)
-    old_carry = (regs.F & FLAG_C) << 7
-    new_carry = value & 1
-    result = ((value >> 1) | old_carry) & 0xFF
+    old_carry = regs.F & FLAG_C
+    result = RR_CARRY_1[value] if old_carry else RR_CARRY_0[value]
     cpu.set_reg8(dest, result)
+    new_carry = value & 1
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -302,12 +308,12 @@ def rr_hl(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    old_carry = (regs.F & FLAG_C) << 7
+    value = cpu._bus_read(addr, cycles + 1)
+    old_carry = regs.F & FLAG_C
+    result = RR_CARRY_1[value] if old_carry else RR_CARRY_0[value]
+    cpu._bus_write(addr, result, cycles + 4)
+    cpu.cycles += 15
     new_carry = value & 1
-    result = ((value >> 1) | old_carry) & 0xFF
-    cpu._bus_write(addr, result, cpu.cycles)
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -322,9 +328,9 @@ def sla_r(cpu: "Z80CPU", dest: int) -> int:
     """SLA r - Shift left arithmetic (8 T-states)"""
     regs = cpu.regs
     value = cpu.get_reg8(dest)
-    carry = (value >> 7) & 1
-    result = (value << 1) & 0xFF
+    result = ROT_RESULT[4][value]
     cpu.set_reg8(dest, result)
+    carry = ROT_CARRY[4][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -340,11 +346,11 @@ def sla_hl(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    carry = (value >> 7) & 1
-    result = (value << 1) & 0xFF
-    cpu._bus_write(addr, result, cpu.cycles)
+    value = cpu._bus_read(addr, cycles + 1)
+    result = ROT_RESULT[4][value]
+    cpu._bus_write(addr, result, cycles + 4)
+    cpu.cycles += 15
+    carry = ROT_CARRY[4][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -359,9 +365,9 @@ def sra_r(cpu: "Z80CPU", dest: int) -> int:
     """SRA r - Shift right arithmetic (8 T-states)"""
     regs = cpu.regs
     value = cpu.get_reg8(dest)
-    carry = value & 1
-    result = ((value >> 1) | (value & 0x80)) & 0xFF
+    result = ROT_RESULT[5][value]
     cpu.set_reg8(dest, result)
+    carry = ROT_CARRY[5][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -377,11 +383,11 @@ def sra_hl(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    carry = value & 1
-    result = ((value >> 1) | (value & 0x80)) & 0xFF
-    cpu._bus_write(addr, result, cpu.cycles)
+    value = cpu._bus_read(addr, cycles + 1)
+    result = ROT_RESULT[5][value]
+    cpu._bus_write(addr, result, cycles + 4)
+    cpu.cycles += 15
+    carry = ROT_CARRY[5][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -396,9 +402,9 @@ def sll_r(cpu: "Z80CPU", dest: int) -> int:
     """SLL r - Shift left logical (undocumented) (8 T-states)"""
     regs = cpu.regs
     value = cpu.get_reg8(dest)
-    carry = (value >> 7) & 1
-    result = ((value << 1) | 1) & 0xFF
+    result = ROT_RESULT[6][value]
     cpu.set_reg8(dest, result)
+    carry = ROT_CARRY[6][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -414,11 +420,11 @@ def sll_hl(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    carry = (value >> 7) & 1
-    result = ((value << 1) | 1) & 0xFF
-    cpu._bus_write(addr, result, cpu.cycles)
+    value = cpu._bus_read(addr, cycles + 1)
+    result = ROT_RESULT[6][value]
+    cpu._bus_write(addr, result, cycles + 4)
+    cpu.cycles += 15
+    carry = ROT_CARRY[6][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -433,9 +439,9 @@ def srl_r(cpu: "Z80CPU", dest: int) -> int:
     """SRL r - Shift right logical (8 T-states)"""
     regs = cpu.regs
     value = cpu.get_reg8(dest)
-    carry = value & 1
-    result = (value >> 1) & 0xFF
+    result = ROT_RESULT[7][value]
     cpu.set_reg8(dest, result)
+    carry = ROT_CARRY[7][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -451,11 +457,11 @@ def srl_hl(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    carry = value & 1
-    result = (value >> 1) & 0xFF
-    cpu._bus_write(addr, result, cpu.cycles)
+    value = cpu._bus_read(addr, cycles + 1)
+    result = ROT_RESULT[7][value]
+    cpu._bus_write(addr, result, cycles + 4)
+    cpu.cycles += 15
+    carry = ROT_CARRY[7][value]
     regs.F = result & (FLAG_S | FLAG_F3 | FLAG_F5)
     if result == 0:
         regs.F |= FLAG_Z
@@ -509,9 +515,9 @@ def set_n_hl(cpu: "Z80CPU", bit: int) -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write(addr, value | (1 << bit), cycles)
+    value = cpu._bus_read(addr, cycles + 1)
+    cpu._bus_write(addr, value | (1 << bit), cycles + 4)
+    cpu.cycles += 15
     return 15
 
 
@@ -527,9 +533,9 @@ def res_n_hl(cpu: "Z80CPU", bit: int) -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     addr = regs.HL
-    value = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write(addr, value & ~(1 << bit), cycles)
+    value = cpu._bus_read(addr, cycles + 1)
+    cpu._bus_write(addr, value & ~(1 << bit), cycles + 4)
+    cpu.cycles += 15
     return 15
 
 

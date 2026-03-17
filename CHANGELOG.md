@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-03-17
+
+### Performance Improvements
+- **Rotate/Shift lookup tables**: Added LUTs (~5KB) for all rotate/shift operations (RLC, RRC, RL, RR, SLA, SRA, SLL, SRL) replacing procedural shifts with single memory lookups
+- **DAA lookup table**: Added 2KB LUT for Decimal Adjust Accumulator, precomputing all 2048 combinations of (N, H, C, A)
+- **Explicit T-state timing**: Replaced `advance_cycles()` calls with explicit T-state offsets in bus operations, reducing function call overhead by ~70 calls
+- **New CPU methods**: Added `read_at`, `write_at`, `read16_at`, `write16_at`, `push16_at`, `pop16_at` for cycle-exact bus timing
+
+### Architecture
+- Removed deprecated `advance_cycles` method
+- All bus operations now pass explicit T-state positions matching Z80 UM0080 specification
+- Core remains machine-independent (pure Python, no platform-specific code)
+
+### Verified
+- All 860 tests pass
+
 ## [1.3.0] - 2026-03-17
 
 ### New Features

@@ -21,10 +21,9 @@ def _push_word(cpu: "Z80CPU", value: int) -> int:
     """Push 16-bit value to stack. Returns new SP."""
     cycles = cpu.cycles
     sp = (cpu.regs.SP - 2) & 0xFFFF
-    cpu._bus_write(sp, value & 0xFF, cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write((sp + 1) & 0xFFFF, (value >> 8) & 0xFF, cycles + 3)
-    cpu.advance_cycles(3)
+    cpu._bus_write(sp, value & 0xFF, cycles + 1)
+    cpu._bus_write((sp + 1) & 0xFFFF, (value >> 8) & 0xFF, cycles + 4)
+    cpu.cycles += 7
     cpu.regs.SP = sp
     return sp
 
@@ -33,11 +32,10 @@ def _pop_word(cpu: "Z80CPU") -> tuple[int, int]:
     """Pop 16-bit value from stack. Returns (value, new SP)."""
     sp = cpu.regs.SP
     cycles = cpu.cycles
-    low = cpu._bus_read(sp, cycles)
-    cpu.advance_cycles(3)
-    high = cpu._bus_read((sp + 1) & 0xFFFF, cycles + 3)
-    cpu.advance_cycles(3)
+    low = cpu._bus_read(sp, cycles + 1)
+    high = cpu._bus_read((sp + 1) & 0xFFFF, cycles + 4)
     new_sp = (sp + 2) & 0xFFFF
+    cpu.cycles += 10
     cpu.regs.SP = new_sp
     return (low | (high << 8)), new_sp
 
@@ -53,10 +51,9 @@ def ld_hl_nn(cpu: "Z80CPU") -> int:
     """LD HL,(nn) - Load HL from 16-bit address (16 T-states)"""
     addr = _read_addr_from_pc(cpu, 1)
     cycles = cpu.cycles
-    low = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    high = cpu._bus_read((addr + 1) & 0xFFFF, cycles + 3)
-    cpu.advance_cycles(3)
+    low = cpu._bus_read(addr, cycles + 3)
+    high = cpu._bus_read((addr + 1) & 0xFFFF, cycles + 6)
+    cpu.cycles += 16
     cpu.regs.HL = low | (high << 8)
     return 16
 
@@ -65,10 +62,9 @@ def ld_hl_nn_ed(cpu: "Z80CPU") -> int:
     """ED LD HL,(nn) - Load HL from 16-bit address (20 T-states)"""
     addr = _read_addr_from_pc(cpu, 2)
     cycles = cpu.cycles
-    low = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    high = cpu._bus_read((addr + 1) & 0xFFFF, cycles + 3)
-    cpu.advance_cycles(3)
+    low = cpu._bus_read(addr, cycles + 4)
+    high = cpu._bus_read((addr + 1) & 0xFFFF, cycles + 7)
+    cpu.cycles += 20
     cpu.regs.HL = low | (high << 8)
     return 20
 
@@ -77,11 +73,9 @@ def ld_nn_hl(cpu: "Z80CPU") -> int:
     """LD (nn),HL - Store HL to 16-bit address (16 T-states)"""
     addr = _read_addr_from_pc(cpu, 1)
     cycles = cpu.cycles
-    cpu._bus_write(addr, cpu.regs.L, cycles)
-    cpu.advance_cycles(3)
-    cpu.advance_cycles(3)
-    cpu._bus_write((addr + 1) & 0xFFFF, cpu.regs.H, cpu.cycles)
-    cpu.advance_cycles(3)
+    cpu._bus_write(addr, cpu.regs.L, cycles + 3)
+    cpu._bus_write((addr + 1) & 0xFFFF, cpu.regs.H, cycles + 6)
+    cpu.cycles += 16
     return 16
 
 
@@ -89,15 +83,12 @@ def ld_nn_hl_ed(cpu: "Z80CPU") -> int:
     """ED LD (nn),HL - Store HL to 16-bit address (20 T-states)"""
     pc = cpu.regs.PC
     cycles = cpu.cycles
-    low_addr = cpu._bus_read((pc + 2) & 0xFFFF, cycles)
-    cpu.advance_cycles(3)
-    high_addr = cpu._bus_read((pc + 3) & 0xFFFF, cycles + 3)
-    cpu.advance_cycles(3)
+    low_addr = cpu._bus_read((pc + 2) & 0xFFFF, cycles + 1)
+    high_addr = cpu._bus_read((pc + 3) & 0xFFFF, cycles + 4)
     addr = low_addr | (high_addr << 8)
-    cpu._bus_write(addr, cpu.regs.L, cpu.cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write((addr + 1) & 0xFFFF, cpu.regs.H, cpu.cycles + 3)
-    cpu.advance_cycles(3)
+    cpu._bus_write(addr, cpu.regs.L, cycles + 7)
+    cpu._bus_write((addr + 1) & 0xFFFF, cpu.regs.H, cycles + 10)
+    cpu.cycles += 20
     return 20
 
 
@@ -143,13 +134,12 @@ def ex_sp_hl(cpu: "Z80CPU") -> int:
     """EX (SP),HL - Exchange HL with top of stack (19 T-states)"""
     sp = cpu.regs.SP
     cycles = cpu.cycles
-    low = cpu._bus_read(sp, cycles)
-    cpu.advance_cycles(3)
-    high = cpu._bus_read((sp + 1) & 0xFFFF, cycles)
+    low = cpu._bus_read(sp, cycles + 1)
+    high = cpu._bus_read((sp + 1) & 0xFFFF, cycles + 4)
     temp = low | (high << 8)
-    cpu._bus_write(sp, cpu.regs.L, cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write((sp + 1) & 0xFFFF, cpu.regs.H, cycles)
+    cpu._bus_write(sp, cpu.regs.L, cycles + 7)
+    cpu._bus_write((sp + 1) & 0xFFFF, cpu.regs.H, cycles + 10)
+    cpu.cycles += 19
     cpu.regs.HL = temp
     return 19
 
@@ -158,9 +148,9 @@ def ld_rr_nn_ind(cpu: "Z80CPU", dest_attr: str) -> int:
     """LD rr,(nn) - Consolidated (20 T-states)"""
     addr = _read_addr_from_pc(cpu, 2)
     cycles = cpu.cycles
-    low = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    high = cpu._bus_read((addr + 1) & 0xFFFF, cycles)
+    low = cpu._bus_read(addr, cycles + 4)
+    high = cpu._bus_read((addr + 1) & 0xFFFF, cycles + 7)
+    cpu.cycles += 20
     setattr(cpu.regs, dest_attr, low | (high << 8))
     return 20
 
@@ -170,9 +160,9 @@ def ld_nn_rr(cpu: "Z80CPU", src_attr: str) -> int:
     addr = _read_addr_from_pc(cpu, 2)
     cycles = cpu.cycles
     val = getattr(cpu.regs, src_attr)
-    cpu._bus_write(addr, val & 0xFF, cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write((addr + 1) & 0xFFFF, (val >> 8) & 0xFF, cycles)
+    cpu._bus_write(addr, val & 0xFF, cycles + 4)
+    cpu._bus_write((addr + 1) & 0xFFFF, (val >> 8) & 0xFF, cycles + 7)
+    cpu.cycles += 20
     return 20
 
 
@@ -190,10 +180,10 @@ def ld_ix_nn_ind(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """LD IX/IY,(nn) (20 T-states)"""
     addr = _read_addr_from_pc(cpu, 2)
     cycles = cpu.cycles
-    low = cpu._bus_read(addr, cycles)
-    cpu.advance_cycles(3)
-    high = cpu._bus_read((addr + 1) & 0xFFFF, cycles)
+    low = cpu._bus_read(addr, cycles + 4)
+    high = cpu._bus_read((addr + 1) & 0xFFFF, cycles + 7)
     val = low | (high << 8)
+    cpu.cycles += 20
     if is_iy:
         cpu.regs.IY = val
     else:
@@ -206,9 +196,9 @@ def ld_nn_ix(cpu: "Z80CPU", is_iy: bool = False) -> int:
     addr = _read_addr_from_pc(cpu, 2)
     cycles = cpu.cycles
     val = cpu.regs.IY if is_iy else cpu.regs.IX
-    cpu._bus_write(addr, val & 0xFF, cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write((addr + 1) & 0xFFFF, (val >> 8) & 0xFF, cycles)
+    cpu._bus_write(addr, val & 0xFF, cycles + 4)
+    cpu._bus_write((addr + 1) & 0xFFFF, (val >> 8) & 0xFF, cycles + 7)
+    cpu.cycles += 20
     return 20
 
 
@@ -239,15 +229,14 @@ def ex_sp_ix(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """EX (SP),IX/IY (23 T-states)"""
     sp = cpu.regs.SP
     cycles = cpu.cycles
-    low = cpu._bus_read(sp, cycles)
-    cpu.advance_cycles(3)
-    high = cpu._bus_read((sp + 1) & 0xFFFF, cycles)
+    low = cpu._bus_read(sp, cycles + 1)
+    high = cpu._bus_read((sp + 1) & 0xFFFF, cycles + 4)
     temp = low | (high << 8)
     cpu.regs.Memptr = temp
     val = cpu.regs.IY if is_iy else cpu.regs.IX
-    cpu._bus_write(sp, val & 0xFF, cycles)
-    cpu.advance_cycles(3)
-    cpu._bus_write((sp + 1) & 0xFFFF, (val >> 8) & 0xFF, cycles)
+    cpu._bus_write(sp, val & 0xFF, cycles + 7)
+    cpu._bus_write((sp + 1) & 0xFFFF, (val >> 8) & 0xFF, cycles + 10)
+    cpu.cycles += 23
     if is_iy:
         cpu.regs.IY = temp
     else:

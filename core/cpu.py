@@ -106,10 +106,51 @@ class Z80CPU:
         """Write to I/O port via bus."""
         self._bus_io_write(port, value, self.cycles)
 
-    def advance_cycles(self, n: int) -> int:
-        """Advance T-state counter by n cycles. Returns new value."""
-        self.cycles += n
-        return self.cycles
+    def read_at(self, addr: int, t_state: int) -> int:
+        """Read byte from memory at explicit T-state."""
+        return self._bus_read(addr, t_state)
+
+    def write_at(self, addr: int, value: int, t_state: int) -> None:
+        """Write byte to memory at explicit T-state, invalidating decoder cache."""
+        self._bus_write(addr, value, t_state)
+        self.decoder.invalidate_cache(addr)
+
+    def io_read_at(self, port: int, t_state: int) -> int:
+        """Read from I/O port at explicit T-state."""
+        return self._bus_io_read(port, t_state)
+
+    def io_write_at(self, port: int, value: int, t_state: int) -> None:
+        """Write to I/O port at explicit T-state."""
+        self._bus_io_write(port, value, t_state)
+
+    def read16_at(self, addr: int, base_t: int) -> int:
+        """Read 16-bit value from memory at explicit T-states (addr, addr+1)."""
+        lo = self._bus_read(addr, base_t)
+        hi = self._bus_read((addr + 1) & 0xFFFF, base_t + 1)
+        return hi << 8 | lo
+
+    def write16_at(self, addr: int, value: int, base_t: int) -> None:
+        """Write 16-bit value to memory at explicit T-states."""
+        self._bus_write(addr, value & 0xFF, base_t)
+        self._bus_write((addr + 1) & 0xFFFF, (value >> 8) & 0xFF, base_t + 1)
+        self.decoder.invalidate_cache(addr)
+        self.decoder.invalidate_cache((addr + 1) & 0xFFFF)
+
+    def push16_at(self, value: int, base_t: int) -> int:
+        """Push 16-bit value at explicit T-states. Returns new SP."""
+        sp = (self.regs.SP - 2) & 0xFFFF
+        self._bus_write(sp, value & 0xFF, base_t)
+        self._bus_write((sp + 1) & 0xFFFF, (value >> 8) & 0xFF, base_t + 1)
+        self.regs.SP = sp
+        return sp
+
+    def pop16_at(self, base_t: int) -> int:
+        """Pop 16-bit value at explicit T-states. Returns value."""
+        sp = self.regs.SP
+        lo = self._bus_read(sp, base_t)
+        hi = self._bus_read((sp + 1) & 0xFFFF, base_t + 1)
+        self.regs.SP = (sp + 2) & 0xFFFF
+        return hi << 8 | lo
 
     def _internal_write(self, addr: int, value: int, cycles: int) -> None:
         """Internal write wrapper that ensures the decoder cache is always invalidated."""
@@ -122,30 +163,19 @@ class Z80CPU:
 
     def read16(self, addr: int) -> int:
         """Read 16-bit value from memory (little-endian)."""
-        lo = self._bus_read(addr, self.cycles)
-        hi = self._bus_read((addr + 1) & 0xFFFF, self.cycles + 1)
-        return hi << 8 | lo
+        return self.read16_at(addr, self.cycles)
 
     def write16(self, addr: int, value: int) -> None:
         """Write 16-bit value to memory (little-endian)."""
-        self._bus_write(addr, value & 0xFF, self.cycles)
-        self._bus_write((addr + 1) & 0xFFFF, (value >> 8) & 0xFF, self.cycles + 1)
+        self.write16_at(addr, value, self.cycles)
 
     def push16(self, value: int) -> int:
         """Push 16-bit value onto stack. Returns new SP."""
-        sp = (self.regs.SP - 2) & 0xFFFF
-        self._bus_write(sp, value & 0xFF, self.cycles)
-        self._bus_write((sp + 1) & 0xFFFF, (value >> 8) & 0xFF, self.cycles + 1)
-        self.regs.SP = sp
-        return sp
+        return self.push16_at(value, self.cycles)
 
     def pop16(self) -> int:
         """Pop 16-bit value from stack. Returns value and advances SP."""
-        sp = self.regs.SP
-        lo = self._bus_read(sp, self.cycles)
-        hi = self._bus_read((sp + 1) & 0xFFFF, self.cycles + 1)
-        self.regs.SP = (sp + 2) & 0xFFFF
-        return hi << 8 | lo
+        return self.pop16_at(self.cycles)
 
     def call(self, pc: int) -> int:
         """Execute CALL: push PC and jump to target. Returns new PC."""
@@ -207,8 +237,8 @@ class Z80CPU:
         sp = (regs.SP - 2) & 0xFFFF
         pc = regs.PC
         self._bus_write(sp, pc & 0xFF, cycles + 1)
-        self.advance_cycles(3)
-        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, self.cycles)
+        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, cycles + 4)
+        self.cycles += 11
 
         regs.SP = sp
         regs.PC = 0x0066
@@ -229,8 +259,8 @@ class Z80CPU:
         sp = (regs.SP - 2) & 0xFFFF
         pc = regs.PC
         self._bus_write(sp, pc & 0xFF, cycles + 1)
-        self.advance_cycles(3)
-        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, self.cycles)
+        self._bus_write((sp + 1) & 0xFFFF, (pc >> 8) & 0xFF, cycles + 4)
+        self.cycles += 11
         regs.SP = sp
 
         if regs.IM == 0:
@@ -252,10 +282,11 @@ class Z80CPU:
             return 13
         else:
             # IM 2: Vectored interrupt (19 cycles total: 7 push + 2 vector read + 2 wait)
+            cycles = self.cycles
             vector = (regs.I << 8) | (self.interrupt_data & 0xFE)
-            low = self._bus_read(vector, self.cycles)
-            self.advance_cycles(3)
-            high = self._bus_read((vector + 1) & 0xFFFF, self.cycles)
+            low = self._bus_read(vector, cycles + 14)
+            high = self._bus_read((vector + 1) & 0xFFFF, cycles + 17)
+            self.cycles += 19
             regs.PC = low | (high << 8)
             self._pc_modified = True
             return 19
