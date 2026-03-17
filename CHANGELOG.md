@@ -2,7 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.0] - 2026-03-14
+## [1.2.0] - 2026-03-17
+
+### Performance Improvements
+- **Hot path optimization**: Added local variable caching in CPU execute loop to reduce attribute lookups
+- **Cache-first dispatch**: Check pre-decoded cache before calling decoder for O(1) fast-path
+- **Reduced JIT duplicates**: Removed duplicate Numba JIT function definitions
+
+### Bug Fixes
+- **DDCB/FDCB displacement bug**: Fixed Bug4 - handlers now correctly read displacement at execution time via `_get_indexed_addr()` instead of capturing it at decode time (which clobbered the bit-number field)
+- **DD/FD prefix fallthrough**: Fixed Bug8 - unknown DD/FD prefixes now fall through to base opcode per Z80 undocumented behaviour
+- **Bank switch cache invalidation**: Fixed incorrect optimization that silently skipped small memory ranges (<4KB) during bank switches - now correctly flushes all bank windows regardless of size
+
+### Code Quality
+- **Simplified flag computation**: Consolidated lookup tables (SZ53P_TABLE, SZHZP_TABLE) for cleaner single-lookup flag operations
+- **Streamlined decoder**: Improved documentation and code clarity in decoder module
+- **Complete state snapshots**: Added missing interrupt state fields (interrupt_pending, interrupt_data, nmi_pending, bus_request, EI_JUST_RESOLVED) to CPUState
+
+### Verified
+- All existing tests pass
 
 ### Critical Bug Fixes
 - **IFF2 not cleared on maskable interrupt**: Now correctly clears both IFF1 and IFF2 (was only clearing IFF1)

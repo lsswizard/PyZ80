@@ -3,7 +3,7 @@ Z80 CPU State Module
 Snapshot and restore CPU state for debugging, rewind, and testing.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 import copy
 
@@ -11,10 +11,10 @@ import copy
 @dataclass
 class CPUState:
     """
-    Snapshot of CPU state for debugging/serialization.
+    Complete snapshot of CPU state for save/restore, debugging, and serialisation.
 
-    Contains all register values, flags, and internal state
-    needed to completely restore CPU execution context.
+    Captures all register values, interrupt state, and execution counters
+    needed to fully restore a CPU execution context.
     """
 
     # Main registers
@@ -46,70 +46,69 @@ class CPUState:
     PC: int = 0
 
     # Interrupt and refresh registers
-    I: int = 0  # noqa: E741
+    I: int = 0   # noqa: E741
     R: int = 0
 
-    # Interrupt flip-flops
+    # Interrupt flip-flops and mode
     IFF1: bool = False
     IFF2: bool = False
-    IM: int = 0  # Interrupt mode 0, 1, or 2
-    EI_PENDING: bool = False
+    IM: int = 0
 
-    # Memory pointer for special flag operations
+    # EI-related deferred-interrupt bookkeeping
+    EI_PENDING: bool = False
+    EI_JUST_RESOLVED: bool = False
+
+    # Memory pointer (used by several flag-affecting instructions)
     Memptr: int = 0
 
-    # CPU status
+    # CPU execution status
     halted: bool = False
     cycles: int = 0
     instruction_count: int = 0
 
+    # Interrupt / bus signals (needed for full round-trip snapshots)
+    interrupt_pending: bool = False
+    interrupt_data: int = 0xFF
+    nmi_pending: bool = False
+    bus_request: bool = False
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert state to dictionary for serialization"""
+        """Convert state to dictionary for serialisation."""
         return {
-            "A": self.A,
-            "F": self.F,
-            "B": self.B,
-            "C": self.C,
-            "D": self.D,
-            "E": self.E,
-            "H": self.H,
-            "L": self.L,
-            "Ap": self.Ap,
-            "Fp": self.Fp,
-            "Bp": self.Bp,
-            "Cp": self.Cp,
-            "Dp": self.Dp,
-            "Ep": self.Ep,
-            "Hp": self.Hp,
-            "Lp": self.Lp,
-            "IX": self.IX,
-            "IY": self.IY,
-            "SP": self.SP,
-            "PC": self.PC,
-            "I": self.I,
-            "R": self.R,
-            "IFF1": self.IFF1,
-            "IFF2": self.IFF2,
-            "IM": self.IM,
+            "A": self.A, "F": self.F,
+            "B": self.B, "C": self.C,
+            "D": self.D, "E": self.E,
+            "H": self.H, "L": self.L,
+            "Ap": self.Ap, "Fp": self.Fp,
+            "Bp": self.Bp, "Cp": self.Cp,
+            "Dp": self.Dp, "Ep": self.Ep,
+            "Hp": self.Hp, "Lp": self.Lp,
+            "IX": self.IX, "IY": self.IY,
+            "SP": self.SP, "PC": self.PC,
+            "I": self.I,   "R": self.R,
+            "IFF1": self.IFF1, "IFF2": self.IFF2, "IM": self.IM,
             "EI_PENDING": self.EI_PENDING,
             "EI_JUST_RESOLVED": self.EI_JUST_RESOLVED,
             "Memptr": self.Memptr,
             "halted": self.halted,
             "cycles": self.cycles,
             "instruction_count": self.instruction_count,
+            "interrupt_pending": self.interrupt_pending,
+            "interrupt_data": self.interrupt_data,
+            "nmi_pending": self.nmi_pending,
+            "bus_request": self.bus_request,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CPUState":
-        """Create state from dictionary"""
-        return cls(**data)
+        """Create state from dictionary, ignoring unknown keys for forward-compat."""
+        known = {f for f in cls.__dataclass_fields__}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
     def copy(self) -> "CPUState":
-        """Create a deep copy of this state"""
-        return copy.deepcopy(self)
+        return copy.copy(self)   # dataclass fields are all scalars — shallow is fine
 
     def __str__(self) -> str:
-        """Human-readable state representation"""
         return (
             f"CPUState(A={self.A:02X} F={self.F:02X} "
             f"BC={self.B:02X}{self.C:02X} DE={self.D:02X}{self.E:02X} "
@@ -119,35 +118,24 @@ class CPUState:
         )
 
     def flags_str(self) -> str:
-        """Return flags as string representation"""
-        flags = []
-        if self.F & 0x80:
-            flags.append("S")
-        if self.F & 0x40:
-            flags.append("Z")
-        if self.F & 0x20:
-            flags.append("5")
-        if self.F & 0x10:
-            flags.append("H")
-        if self.F & 0x08:
-            flags.append("3")
-        if self.F & 0x04:
-            flags.append("P")
-        if self.F & 0x02:
-            flags.append("N")
-        if self.F & 0x01:
-            flags.append("C")
-        return "".join(flags) if flags else "----"
+        """Return active flag names as a compact string."""
+        parts = []
+        if self.F & 0x80: parts.append("S")
+        if self.F & 0x40: parts.append("Z")
+        if self.F & 0x20: parts.append("5")
+        if self.F & 0x10: parts.append("H")
+        if self.F & 0x08: parts.append("3")
+        if self.F & 0x04: parts.append("P")
+        if self.F & 0x02: parts.append("N")
+        if self.F & 0x01: parts.append("C")
+        return "".join(parts) if parts else "----"
 
 
 class StateManager:
     """
-    Manages CPU state history for debugging and rewind functionality.
+    Manages a rolling history of CPU state snapshots.
 
-    Features:
-    - Record state snapshots at key points
-    - Rewind to previous states
-    - Compare states for debugging
+    Supports rewind / forward navigation for debugging.
     """
 
     def __init__(self, max_history: int = 1000):
@@ -156,60 +144,45 @@ class StateManager:
         self.current_index: int = -1
 
     def record(self, state: CPUState) -> None:
-        """Record a state snapshot"""
-        # If we're not at the end, truncate forward history
+        """Append a snapshot, truncating any forward history."""
         if self.current_index < len(self.history) - 1:
             self.history = self.history[: self.current_index + 1]
 
         self.history.append(state.copy())
         self.current_index = len(self.history) - 1
 
-        # Limit history size
         if len(self.history) > self.max_history:
             self.history.pop(0)
             self.current_index -= 1
 
     def can_rewind(self) -> bool:
-        """Check if rewind is possible"""
         return self.current_index > 0
 
     def can_forward(self) -> bool:
-        """Check if forward is possible"""
         return self.current_index < len(self.history) - 1
 
     def rewind(self) -> Optional[CPUState]:
-        """Rewind to previous state"""
         if self.can_rewind():
             self.current_index -= 1
             return self.history[self.current_index].copy()
         return None
 
     def forward(self) -> Optional[CPUState]:
-        """Go forward to next state"""
         if self.can_forward():
             self.current_index += 1
             return self.history[self.current_index].copy()
         return None
 
     def current(self) -> Optional[CPUState]:
-        """Get current state"""
         if 0 <= self.current_index < len(self.history):
             return self.history[self.current_index].copy()
         return None
 
     def clear(self) -> None:
-        """Clear all history"""
         self.history.clear()
         self.current_index = -1
 
     def compare(self, state1: CPUState, state2: CPUState) -> Dict[str, tuple]:
-        """Compare two states and return differences"""
-        diffs = {}
-        d1 = state1.to_dict()
-        d2 = state2.to_dict()
-
-        for key in d1:
-            if d1[key] != d2[key]:
-                diffs[key] = (d1[key], d2[key])
-
-        return diffs
+        """Return a dict of fields that differ between two states."""
+        d1, d2 = state1.to_dict(), state2.to_dict()
+        return {k: (d1[k], d2[k]) for k in d1 if d1[k] != d2[k]}

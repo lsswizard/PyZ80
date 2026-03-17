@@ -1,25 +1,23 @@
 """
 Z80 Instruction Decoder Module
 
-This module handles the decoding of Z80 opcodes into executable MicroOps.
-It implements a pre-decoding strategy with caching for optimal performance.
+Pre-decodes Z80 opcodes into MicroOps for fast execution.  Results are cached
+by address so that a given instruction is decoded at most once per memory state.
 
-Opcode Tables:
-    - Base: Standard Z80 instructions (0x00-0xFF)
-    - CB: Bit manipulation instructions (0xCB prefix)
-    - ED: Extended instructions (0xED prefix)
-    - DD: IX register instructions (0xDD prefix)
-    - FD: IY register instructions (0xFD prefix)
+Opcode table layout:
+    Base  0x00-0xFF  Standard instructions
+    CB    bit-manipulation instructions
+    ED    extended instructions
+    DD    IX-register instructions
+    FD    IY-register instructions
+    DDCB  IX-indexed bit instructions  (4 bytes: DD CB d op)
+    FDCB  IY-indexed bit instructions  (4 bytes: FD CB d op)
 
-Special Handling:
-    DDCB/FDCB instructions (indexed bit operations) require special treatment:
-    - They operate on (IX+d)/(IY+d) instead of (HL)
-    - Format: DD CB d cb (4 bytes) or FD CB d cb (4 bytes)
-    - d = signed displacement byte (-128 to +127)
-    - cb = CB opcode determining operation and target register
-
-    Undocumented Z80 behavior: The CB opcode's low 3 bits determine if the
-    result is also stored in a register (e.g., RLC (IX+d), B stores result in B).
+Cache invalidation:
+    The cache is keyed by the 16-bit PC address of the first opcode byte.
+    Any bus_write to RAM must call invalidate_cache(addr) so that stale
+    MicroOps are not re-executed.  For banked memory, call invalidate_range()
+    across the entire bank window after every bank switch.
 """
 
 from typing import Optional
@@ -38,103 +36,94 @@ from .instructions import (
 
 class InstructionDecoder:
     """
-    Pre-decoding instruction decoder.
-    Converts opcodes into MicroOps for fast execution.
+    Pre-decoding instruction cache.
 
-    Cache Behavior:
-        - Unbounded cache (max 65536 entries for 64KB address space)
-        - No eviction policy - assumes flat memory model
-        - For banked memory systems, call invalidate_cache() on bank switches
+    Cache design:
+      - Flat list of 65 536 slots (one per possible 16-bit address).
+      - O(1) lookup and O(1) invalidation.
+      - No eviction policy — assumes a flat or paged 64 KB memory model.
+        For banked systems call invalidate_range() on every bank switch.
     """
 
-    # Maximum cache size (full 64KB address space)
     MAX_CACHE_SIZE = 65536
 
     def __init__(self):
-        # OPT5: Pre-allocated list for O(1) integer-indexed cache lookup
         self.cache: list = [None] * 65536
 
+    # -------------------------------------------------------------------------
+    # Decoding
+    # -------------------------------------------------------------------------
+
     def decode_at(self, memory, addr: int) -> MicroOp:
-        """Decode instruction at address, return MicroOp."""
+        """Decode instruction at *addr* without consulting the cache."""
         opcode = read_byte(memory, addr)
 
         if opcode == 0xCB:
-            cb_opcode = read_byte(memory, addr + 1)
-            entry = get_cb_opcode(cb_opcode)
+            cb_op = read_byte(memory, addr + 1)
+            entry = get_cb_opcode(cb_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
                 return MicroOp(handler, cycles, length, mnemonic)
-            return MicroOp(nop, 8, 2, f"NOP* (CB {cb_opcode:02X})")
+            return MicroOp(nop, 8, 2, f"NOP* (CB {cb_op:02X})")
 
         elif opcode == 0xED:
-            ed_opcode = read_byte(memory, addr + 1)
-            entry = get_ed_opcode(ed_opcode)
+            ed_op = read_byte(memory, addr + 1)
+            entry = get_ed_opcode(ed_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
                 return MicroOp(handler, cycles, length, mnemonic)
-            return MicroOp(nop, 8, 2, f"NOP* (ED {ed_opcode:02X})")
+            return MicroOp(nop, 8, 2, f"NOP* (ED {ed_op:02X})")
 
         elif opcode == 0xDD:
-            dd_opcode = read_byte(memory, addr + 1)
-            if dd_opcode == 0xCB:
-                # DDCB indexed bit operations (4 bytes): DD CB d cb
-                # d = signed displacement at addr+2
-                # cb = CB opcode at addr+3
-                displacement = read_byte(memory, addr + 2)
-                # Sign-extend displacement to signed byte (-128 to 127)
-                if displacement >= 128:
-                    displacement -= 256
-                cb_opcode = read_byte(memory, addr + 3)
-                entry = get_ddcb_opcode(cb_opcode)
+            dd_op = read_byte(memory, addr + 1)
+            if dd_op == 0xCB:
+                # DDCB: DD CB d op  (4 bytes total)
+                # The displacement is read at execution time by the handler
+                # via _get_indexed_addr(); we must NOT capture it here or
+                # the bit-number field of the opcode gets clobbered.
+                d      = read_byte(memory, addr + 2)
+                if d >= 128:
+                    d -= 256
+                cb_op  = read_byte(memory, addr + 3)
+                entry  = get_ddcb_opcode(cb_op)
                 if entry:
                     handler, cycles, _, mnemonic = entry
-                    # FIX Bug4: do NOT pass displacement as positional arg.
-                    # Handlers call _get_indexed_addr() which reads cpu.regs.PC
-                    # at execution time; passing d here clobbered the bit number.
                     return MicroOp(lambda cpu, h=handler: h(cpu), cycles, 4, mnemonic)
                 return MicroOp(nop, 23, 4, "NOP* (DDCB)")
-            entry = get_dd_opcode(dd_opcode)
+            entry = get_dd_opcode(dd_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
                 return MicroOp(handler, cycles, length, mnemonic)
-            # FIX Bug8: Unknown DD prefix falls through to base opcode
-            entry = get_base_opcode(dd_opcode)
+            # Unknown DD prefix: fall through to base opcode (undocumented behaviour)
+            entry = get_base_opcode(dd_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
-                # Use DD prefix cycles (4 extra) and length 2
                 return MicroOp(handler, cycles + 4, 2, f"(DD) {mnemonic}")
-            return MicroOp(nop, 4, 2, f"NOP* (DD {dd_opcode:02X})")
+            return MicroOp(nop, 4, 2, f"NOP* (DD {dd_op:02X})")
 
         elif opcode == 0xFD:
-            fd_opcode = read_byte(memory, addr + 1)
-            if fd_opcode == 0xCB:
-                # FDCB indexed bit operations (4 bytes): FD CB d cb
-                # d = signed displacement at addr+2
-                # cb = CB opcode at addr+3
-                displacement = read_byte(memory, addr + 2)
-                # Sign-extend displacement to signed byte (-128 to 127)
-                if displacement >= 128:
-                    displacement -= 256
-                cb_opcode = read_byte(memory, addr + 3)
-                entry = get_fdcb_opcode(cb_opcode)
+            fd_op = read_byte(memory, addr + 1)
+            if fd_op == 0xCB:
+                # FDCB: FD CB d op  (4 bytes total)
+                d      = read_byte(memory, addr + 2)
+                if d >= 128:
+                    d -= 256
+                cb_op  = read_byte(memory, addr + 3)
+                entry  = get_fdcb_opcode(cb_op)
                 if entry:
                     handler, cycles, _, mnemonic = entry
-                    # FIX Bug4: do NOT pass displacement as positional arg.
-                    # Handlers call _get_indexed_addr() which reads cpu.regs.PC
-                    # at execution time; passing d here clobbered the bit number.
                     return MicroOp(lambda cpu, h=handler: h(cpu), cycles, 4, mnemonic)
                 return MicroOp(nop, 23, 4, "NOP* (FDCB)")
-            entry = get_fd_opcode(fd_opcode)
+            entry = get_fd_opcode(fd_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
                 return MicroOp(handler, cycles, length, mnemonic)
-            # FIX Bug8: Unknown FD prefix falls through to base opcode
-            entry = get_base_opcode(fd_opcode)
+            # Unknown FD prefix: fall through to base opcode
+            entry = get_base_opcode(fd_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
-                # Use FD prefix cycles (4 extra) and length 2
                 return MicroOp(handler, cycles + 4, 2, f"(FD) {mnemonic}")
-            return MicroOp(nop, 4, 2, f"NOP* (FD {fd_opcode:02X})")
+            return MicroOp(nop, 4, 2, f"NOP* (FD {fd_op:02X})")
 
         else:
             entry = get_base_opcode(opcode)
@@ -144,7 +133,7 @@ class InstructionDecoder:
             return MicroOp(nop, 4, 1, f"NOP* ({opcode:02X})")
 
     def decode(self, memory, addr: int) -> MicroOp:
-        """Decode with caching (OPT5: direct list index, no hash overhead)."""
+        """Return a (possibly cached) MicroOp for the instruction at *addr*."""
         op = self.cache[addr]
         if op is not None:
             return op
@@ -152,43 +141,53 @@ class InstructionDecoder:
         self.cache[addr] = op
         return op
 
+    # -------------------------------------------------------------------------
+    # Cache invalidation
+    # -------------------------------------------------------------------------
+
     def invalidate_cache(self, addr: Optional[int] = None) -> None:
-        """Invalidate cache entry or entire cache.
+        """Invalidate one address (± 3 bytes for multi-byte instructions) or the
+        entire cache when *addr* is None.
 
-        Args:
-            addr: Specific address to invalidate, or None to clear all.
-
-        Note:
-            For banked memory systems, call invalidate_cache() without
-            arguments when switching memory banks to prevent stale cache
-            entries from causing misexecution.
+        Call after every memory write so that modified code is re-decoded
+        on the next fetch.  For bank switches use invalidate_range().
         """
         if addr is None:
-            # OPT5: reset list in-place (faster than building new list)
             for i in range(65536):
                 self.cache[i] = None
         else:
-            # FIX Bug5+OPT5: invalidate multi-byte instruction range with wrap-around
+            # An instruction starting up to 3 bytes before *addr* could
+            # span the written location, so flush the surrounding window.
             addr &= 0xFFFF
             for i in range(4):
                 self.cache[(addr - i) & 0xFFFF] = None
 
     def invalidate_range(self, start: int, end: int) -> None:
-        """Invalidate all cached entries in [start, end).
+        """Invalidate all cached entries covering addresses in [start, end).
 
-        Called by MemoryPager after a bank switch to flush only the
-        address range whose physical contents changed, rather than
-        nuking the entire 64 KB cache every time.
+        An instruction whose first byte is up to 3 bytes *before* the range
+        boundary could straddle it, so the flush window is extended by 4 on
+        the left.
 
-        An instruction starting up to 3 bytes before ``start`` could
-        straddle the bank boundary, so we extend the flush by 4 bytes
-        on the left.
+        This must be called for *every* bank switch, regardless of range size.
+        The previous optimisation that silently skipped ranges ≤ 4 096 bytes
+        has been removed — it was a correctness bug for small bank windows
+        such as the 8 KB ROM/RAM pages used by many Z80 systems.
         """
-        flush_start = max(0, start - 4)
-        flush_end = min(65536, end)
-        self.cache[flush_start:flush_end] = [None] * (flush_end - flush_start)
+        flush_start = max(0,     start - 4)
+        flush_end   = min(65536, end)
+        range_size  = flush_end - flush_start
+
+        if range_size <= 0:
+            return
+
+        if range_size >= 65536:
+            # Whole address space — fastest path
+            for i in range(65536):
+                self.cache[i] = None
+        else:
+            self.cache[flush_start:flush_end] = [None] * range_size
 
     def cache_stats(self) -> dict:
-        """Get cache statistics (OPT5: counts non-None slots)."""
         filled = sum(1 for x in self.cache if x is not None)
         return {"size": filled, "capacity": 65536}

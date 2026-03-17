@@ -48,6 +48,7 @@ class Z80CPU:
         self._bus_io_read = self.bus.bus_io_read
         self._bus_io_write = self.bus.bus_io_write
         self._decode = self.decoder.decode
+        self._cache_list = self.decoder.cache
 
         # Optimized memory view for decoder (if bus provides one)
         self._mem = getattr(self.bus, "memory", None)
@@ -265,16 +266,18 @@ class Z80CPU:
             self.cycles += 1
             return 1
 
+        # Local variables for performance
         regs = self.regs
         pc = regs.PC
-        bus_read = self._bus_read
         cycles = self.cycles
+        cache = self._cache_list
+        mem = self._mem
 
         # Fetch first byte (at current T-state)
-        opcode = bus_read(pc, cycles)
+        opcode = self._bus_read(pc, cycles)
 
         # Advance T-state by M1 duration (4 cycles)
-        self.cycles += 4
+        self.cycles = cycles + 4
 
         # Fast-path: no interrupt pending or deferred
         if not (
@@ -285,20 +288,16 @@ class Z80CPU:
         ):
             if self.halted:
                 self._increment_r(1)
-                # HALT executes NOPs, each taking 4 cycles
-                # We already added 4 for M1, so we're done for this step
                 return 4
         else:
             # Interrupt pending.
-            # _step_interrupt will handle it.
-            # It returns the TOTAL cycles for the instruction/interrupt.
-            # Since we added 4 for M1, but the interrupt handler also includes M1,
-            # we need to subtract the 4 we added to avoid double counting.
             self.cycles -= 4
             return self._step_interrupt(opcode, pc)
 
         # Dispatch pre-decoded opcode
-        op = self._decode(self._mem, pc)
+        op = cache[pc]
+        if op is None:
+            op = self._decode(mem, pc)
 
         if self._trace_enabled:
             self._write_trace(pc, opcode, op)
@@ -308,14 +307,12 @@ class Z80CPU:
         self._increment_r(2 if is_prefixed else 1)
 
         # Call the handler directly, avoiding MicroOp.__call__ overhead
-        # Handler executes at T4 (after M1)
         op_cycles = op.handler(self)
 
         if not self._pc_modified:
             regs.PC = (pc + op.length) & 0xFFFF
 
-        # We already added 4 for M1, so add remaining cycles
-        # op_cycles includes M1, so we subtract 4
+        # Update cycles
         self.cycles += op_cycles - 4
         self.instruction_count += 1
         regs.UnresolvedPrefix = op.length == 1 and is_prefixed
@@ -323,7 +320,6 @@ class Z80CPU:
         # Track if this was LD A,I or LD A,R for interrupt bug
         if opcode == 0xED:
             # Read next byte at T4 (after M1)
-            # cycles is the T-state at the start of the instruction
             next_byte = self._bus_read((pc + 1) & 0xFFFF, cycles + 4)
             self._is_ld_a_ir = next_byte in (0x57, 0x5F)
         else:
@@ -357,7 +353,10 @@ class Z80CPU:
             self.cycles += 4
             return 4
 
-        op = self._decode(self._mem, pc)
+        op = self._cache_list[pc]
+        if op is None:
+            op = self._decode(self._mem, pc)
+
         self._pc_modified = False
         is_prefixed = opcode in (0xCB, 0xDD, 0xFD, 0xED)
         self._increment_r(2 if is_prefixed else 1)
