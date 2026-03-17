@@ -105,3 +105,41 @@ def dec_ix(cpu: "Z80CPU", is_iy: bool = False) -> int:
     else:
         cpu.regs.IX = (cpu.regs.IX - 1) & 0xFFFF
     return 10
+
+
+def adc_ix_rr(cpu: "Z80CPU", reg_pair: int, is_iy: bool = False) -> int:
+    """ADC IX/IY,rr - 16-bit add with carry to index register (15 T-states)"""
+    ix = cpu.regs.IY if is_iy else cpu.regs.IX
+    carry = cpu.regs.F & FLAG_C
+    src = [
+        cpu.regs.BC,
+        cpu.regs.DE,
+        cpu.regs.IY if is_iy else cpu.regs.IX,
+        cpu.regs.SP,
+    ][reg_pair]
+    result = (ix + src + carry) & 0xFFFF
+    if is_iy:
+        cpu.regs.IY = result
+    else:
+        cpu.regs.IX = result
+    cpu.regs.F = get_adc16_flags(ix, src, carry)
+    return 15
+
+
+def sbc_ix_rr(cpu: "Z80CPU", reg_pair: int, is_iy: bool = False) -> int:
+    """SBC IX/IY,rr - 16-bit subtract with carry from index register (15 T-states)"""
+    ix = cpu.regs.IY if is_iy else cpu.regs.IX
+    carry = cpu.regs.F & FLAG_C
+    src = [
+        cpu.regs.BC,
+        cpu.regs.DE,
+        cpu.regs.IY if is_iy else cpu.regs.IX,
+        cpu.regs.SP,
+    ][reg_pair]
+    result = (ix - src - carry) & 0xFFFF
+    if is_iy:
+        cpu.regs.IY = result
+    else:
+        cpu.regs.IX = result
+    cpu.regs.F = get_sbc16_flags(ix, src, carry)
+    return 15

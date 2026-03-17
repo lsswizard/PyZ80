@@ -515,6 +515,7 @@ def _build_dd_opcode_table():
     DD_OPCODE_TABLE[0x19] = (lambda cpu: add_ix_rr(cpu, 1, False), 15, 2, "ADD IX,DE")
     DD_OPCODE_TABLE[0x29] = (lambda cpu: add_ix_rr(cpu, 2, False), 15, 2, "ADD IX,IX")
     DD_OPCODE_TABLE[0x39] = (lambda cpu: add_ix_rr(cpu, 3, False), 15, 2, "ADD IX,SP")
+
     DD_OPCODE_TABLE[0x24] = (lambda cpu: inc_ixh(cpu, False), 8, 2, "INC IXH")
     DD_OPCODE_TABLE[0x25] = (lambda cpu: dec_ixh(cpu, False), 8, 2, "DEC IXH")
     DD_OPCODE_TABLE[0x26] = (lambda cpu: ld_ixh_n(cpu, False), 11, 3, "LD IXH,n")
@@ -608,6 +609,7 @@ def _build_fd_opcode_table():
     FD_OPCODE_TABLE[0x19] = (lambda cpu: add_ix_rr(cpu, 1, True), 15, 2, "ADD IY,DE")
     FD_OPCODE_TABLE[0x29] = (lambda cpu: add_ix_rr(cpu, 2, True), 15, 2, "ADD IY,IY")
     FD_OPCODE_TABLE[0x39] = (lambda cpu: add_ix_rr(cpu, 3, True), 15, 2, "ADD IY,SP")
+
     FD_OPCODE_TABLE[0x24] = (lambda cpu: inc_ixh(cpu, True), 8, 2, "INC IYH")
     FD_OPCODE_TABLE[0x25] = (lambda cpu: dec_ixh(cpu, True), 8, 2, "DEC IYH")
     FD_OPCODE_TABLE[0x26] = (lambda cpu: ld_ixh_n(cpu, True), 11, 3, "LD IYH,n")
@@ -740,6 +742,18 @@ _build_cb_opcode_table()
 _build_ed_opcode_table()
 _build_dd_opcode_table()
 _build_fd_opcode_table()
+
+# Add ADC/SBC IX/IY,rr opcodes (undocumented but implemented)
+# Note: Only BC, DE, and HL are valid - not SP
+DD_OPCODE_TABLE[0x4A] = (lambda cpu: adc_ix_rr(cpu, 0, False), 15, 2, "ADC IX,BC")
+DD_OPCODE_TABLE[0x5A] = (lambda cpu: adc_ix_rr(cpu, 1, False), 15, 2, "ADC IX,DE")
+DD_OPCODE_TABLE[0x42] = (lambda cpu: sbc_ix_rr(cpu, 0, False), 15, 2, "SBC IX,BC")
+DD_OPCODE_TABLE[0x52] = (lambda cpu: sbc_ix_rr(cpu, 1, False), 15, 2, "SBC IX,DE")
+
+FD_OPCODE_TABLE[0x4A] = (lambda cpu: adc_ix_rr(cpu, 0, True), 15, 2, "ADC IY,BC")
+FD_OPCODE_TABLE[0x5A] = (lambda cpu: adc_ix_rr(cpu, 1, True), 15, 2, "ADC IY,DE")
+FD_OPCODE_TABLE[0x42] = (lambda cpu: sbc_ix_rr(cpu, 0, True), 15, 2, "SBC IY,BC")
+FD_OPCODE_TABLE[0x52] = (lambda cpu: sbc_ix_rr(cpu, 1, True), 15, 2, "SBC IY,DE")
 
 
 def get_base_opcode(opcode: int) -> Optional[tuple]:

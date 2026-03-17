@@ -81,11 +81,11 @@ class InstructionDecoder:
                 # The displacement is read at execution time by the handler
                 # via _get_indexed_addr(); we must NOT capture it here or
                 # the bit-number field of the opcode gets clobbered.
-                d      = read_byte(memory, addr + 2)
+                d = read_byte(memory, addr + 2)
                 if d >= 128:
                     d -= 256
-                cb_op  = read_byte(memory, addr + 3)
-                entry  = get_ddcb_opcode(cb_op)
+                cb_op = read_byte(memory, addr + 3)
+                entry = get_ddcb_opcode(cb_op)
                 if entry:
                     handler, cycles, _, mnemonic = entry
                     return MicroOp(lambda cpu, h=handler: h(cpu), cycles, 4, mnemonic)
@@ -98,18 +98,30 @@ class InstructionDecoder:
             entry = get_base_opcode(dd_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
-                return MicroOp(handler, cycles + 4, 2, f"(DD) {mnemonic}")
+
+                # DD prefix adds 1 byte to instruction length
+                # Wrap handler to skip the prefix byte when reading immediates
+                def dd_fallback_wrapper(cpu: "Z80CPU") -> int:
+                    old_pc = cpu.regs.PC
+                    cpu.regs.PC = (cpu.regs.PC + 1) & 0xFFFF
+                    result = handler(cpu)
+                    cpu.regs.PC = old_pc
+                    return result
+
+                return MicroOp(
+                    dd_fallback_wrapper, cycles + 4, length + 1, f"(DD) {mnemonic}"
+                )
             return MicroOp(nop, 4, 2, f"NOP* (DD {dd_op:02X})")
 
         elif opcode == 0xFD:
             fd_op = read_byte(memory, addr + 1)
             if fd_op == 0xCB:
                 # FDCB: FD CB d op  (4 bytes total)
-                d      = read_byte(memory, addr + 2)
+                d = read_byte(memory, addr + 2)
                 if d >= 128:
                     d -= 256
-                cb_op  = read_byte(memory, addr + 3)
-                entry  = get_fdcb_opcode(cb_op)
+                cb_op = read_byte(memory, addr + 3)
+                entry = get_fdcb_opcode(cb_op)
                 if entry:
                     handler, cycles, _, mnemonic = entry
                     return MicroOp(lambda cpu, h=handler: h(cpu), cycles, 4, mnemonic)
@@ -122,7 +134,19 @@ class InstructionDecoder:
             entry = get_base_opcode(fd_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
-                return MicroOp(handler, cycles + 4, 2, f"(FD) {mnemonic}")
+
+                # FD prefix adds 1 byte to instruction length
+                # Wrap handler to skip the prefix byte when reading immediates
+                def fd_fallback_wrapper(cpu: "Z80CPU") -> int:
+                    old_pc = cpu.regs.PC
+                    cpu.regs.PC = (cpu.regs.PC + 1) & 0xFFFF
+                    result = handler(cpu)
+                    cpu.regs.PC = old_pc
+                    return result
+
+                return MicroOp(
+                    fd_fallback_wrapper, cycles + 4, length + 1, f"(FD) {mnemonic}"
+                )
             return MicroOp(nop, 4, 2, f"NOP* (FD {fd_op:02X})")
 
         else:
@@ -174,9 +198,9 @@ class InstructionDecoder:
         has been removed — it was a correctness bug for small bank windows
         such as the 8 KB ROM/RAM pages used by many Z80 systems.
         """
-        flush_start = max(0,     start - 4)
-        flush_end   = min(65536, end)
-        range_size  = flush_end - flush_start
+        flush_start = max(0, start - 4)
+        flush_end = min(65536, end)
+        range_size = flush_end - flush_start
 
         if range_size <= 0:
             return

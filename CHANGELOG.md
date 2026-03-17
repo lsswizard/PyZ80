@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-03-17
+
+### New Features
+- **ADC/SBC IX/IY instructions**: Implemented undocumented 16-bit arithmetic with index registers (ADC IX,BC, ADC IX,DE, SBC IX,BC, SBC IX,DE and IY equivalents)
+- **Opcode verification tool**: Added `tools/check_opcodes.py` to verify all Z80 opcodes are properly handled
+
+### Bug Fixes
+- **DD/FD prefix fallthrough**: Fixed Bug8 - unknown DD/FD prefixes now correctly fall through to base opcode with proper PC handling for immediate values
+- **DDCB/FDCB BIT operations**: Fixed opcode mapping for indexed BIT instructions
+- **LD (nn),SP**: Fixed test and verified correct operation
+- **Page boundary handling**: Fixed CALL/JP instructions at page boundaries
+
+### Testing
+- Added comprehensive test sections for:
+  - Undocumented flags (F3/F5)
+  - DD/FD prefix undocumented behavior
+  - DDCB/FDCB indexed bit operations
+  - Repeat I/O block instructions (INIR, INDR, OTIR, OTDR)
+  - IX/IY 16-bit arithmetic
+  - Comprehensive DAA tests
+  - CCF H-flag behavior
+  - 16-bit LD with SP
+  - Page boundary edge cases
+  - RST comprehensive tests
+- All 860 tests pass
+
+### Verified
+- All Z80 opcode tables have 100% coverage (BASE, CB, ED, DD, FD, DDCB, FDCB)
+
 ## [1.2.0] - 2026-03-17
 
 ### Performance Improvements
