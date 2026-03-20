@@ -191,9 +191,12 @@ class Registers:
             "Memptr": self.Memptr,
         }
 
+    _SLOT_SET = frozenset(__slots__)
+
     def set_state(self, state: Dict[str, Any]) -> None:
+        slots = self._SLOT_SET
         for key, value in state.items():
-            if hasattr(self, key):
+            if key in slots:
                 setattr(self, key, value)
 
     def get_reg16(self, pair: int) -> int:

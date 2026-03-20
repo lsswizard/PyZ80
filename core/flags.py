@@ -476,47 +476,55 @@ def _sbc16_flags_python(hl: int, reg: int, carry: int, result: int) -> int:
 
 if NUMBA_AVAILABLE:
     parity = _parity_fast
-    add_flags = lambda a, b, carry=0, f=0: _add_flags_jit(
-        a, b, (a + b + carry) & 0xFF, a + b + carry
-    )
-    adc_flags = lambda a, b, carry, f=0: _adc_flags_jit(
-        a, b, carry, (a + b + carry) & 0xFF, a + b + carry
-    )
-    sub_flags = lambda a, b, carry=0, f=0: _sub_flags_jit(
-        a, b, (a - b - carry) & 0xFF, a - b - carry
-    )
-    sbc_flags = lambda a, b, carry, f=0: _sbc_flags_jit(
-        a, b, carry, (a - b - carry) & 0xFF, a - b - carry
-    )
+
+    def add_flags(a, b, carry=0, f=0):
+        return _add_flags_jit(a, b, (a + b + carry) & 0xFF, a + b + carry)
+
+    def adc_flags(a, b, carry, f=0):
+        return _adc_flags_jit(a, b, carry, (a + b + carry) & 0xFF, a + b + carry)
+
+    def sub_flags(a, b, carry=0, f=0):
+        return _sub_flags_jit(a, b, (a - b - carry) & 0xFF, a - b - carry)
+
+    def sbc_flags(a, b, carry, f=0):
+        return _sbc_flags_jit(a, b, carry, (a - b - carry) & 0xFF, a - b - carry)
+
     inc_flags = lambda old, new, f=0: _inc_flags_jit(old, new, f)
     dec_flags = lambda old, new, f=0: _dec_flags_jit(old, new, f)
     and_flags = _and_flags_jit
     or_flags = _or_flags_jit
     xor_flags = _xor_flags_jit
-    cp_flags = lambda a, b, f=0: _cp_flags_jit(a, b, (a - b) & 0xFF)
+
+    def cp_flags(a, b, f=0):
+        return _cp_flags_jit(a, b, (a - b) & 0xFF)
+
     add16_flags = _add16_flags_jit
     adc16_flags = _adc16_flags_jit
     sbc16_flags = _sbc16_flags_jit
 else:
     parity = _parity_python
-    add_flags = lambda a, b, carry=0, f=0: _add_flags_python(
-        a, b, (a + b + carry) & 0xFF, a + b + carry
-    )
-    adc_flags = lambda a, b, carry, f=0: _adc_flags_python(
-        a, b, carry, (a + b + carry) & 0xFF, a + b + carry
-    )
-    sub_flags = lambda a, b, carry=0, f=0: _sub_flags_python(
-        a, b, (a - b - carry) & 0xFF, a - b - carry
-    )
-    sbc_flags = lambda a, b, carry, f=0: _sbc_flags_python(
-        a, b, carry, (a - b - carry) & 0xFF, a - b - carry
-    )
+
+    def add_flags(a, b, carry=0, f=0):
+        return _add_flags_python(a, b, (a + b + carry) & 0xFF, a + b + carry)
+
+    def adc_flags(a, b, carry, f=0):
+        return _adc_flags_python(a, b, carry, (a + b + carry) & 0xFF, a + b + carry)
+
+    def sub_flags(a, b, carry=0, f=0):
+        return _sub_flags_python(a, b, (a - b - carry) & 0xFF, a - b - carry)
+
+    def sbc_flags(a, b, carry, f=0):
+        return _sbc_flags_python(a, b, carry, (a - b - carry) & 0xFF, a - b - carry)
+
     inc_flags = lambda old, new, f=0: _inc_flags_python(old, new, f)
     dec_flags = lambda old, new, f=0: _dec_flags_python(old, new, f)
     and_flags = _and_flags_python
     or_flags = _or_flags_python
     xor_flags = _xor_flags_python
-    cp_flags = lambda a, b, f=0: _cp_flags_python(a, b, (a - b) & 0xFF)
+
+    def cp_flags(a, b, f=0):
+        return _cp_flags_python(a, b, (a - b) & 0xFF)
+
     add16_flags = _add16_flags_python
     adc16_flags = _adc16_flags_python
     sbc16_flags = _sbc16_flags_python
@@ -528,11 +536,31 @@ else:
 
 
 def get_add_flags(a: int, b: int, carry: int = 0) -> int:
-    return adc_flags(a, b, carry) if carry else add_flags(a, b)
+    if carry:
+        return (
+            _adc_flags_python(a, b, carry, (a + b + carry) & 0xFF, a + b + carry)
+            if not NUMBA_AVAILABLE
+            else _adc_flags_jit(a, b, carry, (a + b + carry) & 0xFF, a + b + carry)
+        )
+    return (
+        _add_flags_python(a, b, (a + b) & 0xFF, a + b)
+        if not NUMBA_AVAILABLE
+        else _add_flags_jit(a, b, (a + b) & 0xFF, a + b)
+    )
 
 
 def get_sub_flags(a: int, b: int, carry: int = 0) -> int:
-    return sbc_flags(a, b, carry) if carry else sub_flags(a, b)
+    if carry:
+        return (
+            _sbc_flags_python(a, b, carry, (a - b - carry) & 0xFF, a - b - carry)
+            if not NUMBA_AVAILABLE
+            else _sbc_flags_jit(a, b, carry, (a - b - carry) & 0xFF, a - b - carry)
+        )
+    return (
+        _sub_flags_python(a, b, (a - b) & 0xFF, a - b)
+        if not NUMBA_AVAILABLE
+        else _sub_flags_jit(a, b, (a - b) & 0xFF, a - b)
+    )
 
 
 def get_and_flags(result: int) -> int:
@@ -602,21 +630,22 @@ def get_daa_result(a: int, f: int) -> tuple:
 
 
 # ===========================================================================
-# Condition table  (indexed by [flags_byte][condition_code])
+# Condition table  (indexed by (flags_byte << 3) | condition_code)
 # ===========================================================================
 
 
 def _build_cond_table():
-    table = [[False] * 8 for _ in range(256)]
+    table = [False] * 2048
     for f in range(256):
-        table[f][0] = not (f & FLAG_Z)  # NZ
-        table[f][1] = bool(f & FLAG_Z)  # Z
-        table[f][2] = not (f & FLAG_C)  # NC
-        table[f][3] = bool(f & FLAG_C)  # C
-        table[f][4] = not (f & FLAG_PV)  # PO
-        table[f][5] = bool(f & FLAG_PV)  # PE
-        table[f][6] = not (f & FLAG_S)  # P (positive)
-        table[f][7] = bool(f & FLAG_S)  # M (minus)
+        base = f << 3
+        table[base + 0] = not (f & FLAG_Z)  # NZ
+        table[base + 1] = bool(f & FLAG_Z)  # Z
+        table[base + 2] = not (f & FLAG_C)  # NC
+        table[base + 3] = bool(f & FLAG_C)  # C
+        table[base + 4] = not (f & FLAG_PV)  # PO
+        table[base + 5] = bool(f & FLAG_PV)  # PE
+        table[base + 6] = not (f & FLAG_S)  # P (positive)
+        table[base + 7] = bool(f & FLAG_S)  # M (minus)
     return table
 
 

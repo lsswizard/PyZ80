@@ -18,14 +18,6 @@ from .bus import Z80Bus, SimpleBus
 from .state import CPUState, StateManager
 from .decoder import InstructionDecoder
 from .primitives import MicroOp
-from .primitives import (
-    read_byte,
-    read_word,
-    write_byte,
-    write_word,
-    push_word,
-    pop_word,
-)
 
 __all__ = [
     "Z80CPU",
@@ -36,10 +28,4 @@ __all__ = [
     "MicroOp",
     "Z80Bus",
     "SimpleBus",
-    "read_byte",
-    "read_word",
-    "write_byte",
-    "write_word",
-    "push_word",
-    "pop_word",
 ]

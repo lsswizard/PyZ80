@@ -7,7 +7,7 @@ from typing import Callable, TYPE_CHECKING, Any
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
-    from .core import Z80CPU
+    from .cpu import Z80CPU
 
 
 @dataclass
@@ -21,10 +21,6 @@ class MicroOp:
     cycles: int
     length: int
     mnemonic: str = ""
-
-    def __call__(self, cpu: "Z80CPU") -> int:
-        """Execute the micro-operation"""
-        return self.handler(cpu)
 
 
 # =============================================================================

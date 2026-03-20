@@ -107,13 +107,36 @@ def cpi(cpu: "Z80CPU") -> int:
     return 16
 
 
+def _compute_cpi_flags(regs, a: int, value: int, bc_after: int) -> None:
+    """Compute flags for CPI/CPD without side effects."""
+    result = (a - value) & 0xFF
+    half_carry = ((a & 0x0F) - (value & 0x0F)) < 0
+    n = (a - value - (1 if half_carry else 0)) & 0xFF
+    regs.F = (regs.F & FLAG_C) | FLAG_N | (n & FLAG_F3)
+    if n & 0x02:
+        regs.F |= FLAG_F5
+    if result == 0:
+        regs.F |= FLAG_Z
+    if result & 0x80:
+        regs.F |= FLAG_S
+    if half_carry:
+        regs.F |= FLAG_H
+    if bc_after != 0:
+        regs.F |= FLAG_PV
+
+
 def cpir(cpu: "Z80CPU") -> int:
-    """CPIR - Compare, increment, repeat (16/21 T-states)"""
+    """CPIR - Compare, increment, repeat (16/21 T-states).
+    Inlined to avoid double bus_read that cpi()+check would cause."""
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles + 1)
-    cpi(cpu)
-    result = (regs.A - value) & 0xFF
+    a = regs.A
+    result = (a - value) & 0xFF
+    regs.HL = (regs.HL + 1) & 0xFFFF
+    regs.BC = (regs.BC - 1) & 0xFFFF
+    cpu.cycles += 16
+    _compute_cpi_flags(regs, a, value, regs.BC)
     if regs.BC != 0 and result != 0:
         cpu._pc_modified = True
         return 21
@@ -145,12 +168,17 @@ def cpd(cpu: "Z80CPU") -> int:
 
 
 def cpdr(cpu: "Z80CPU") -> int:
-    """CPDR - Compare, decrement, repeat (16/21 T-states)"""
+    """CPDR - Compare, decrement, repeat (16/21 T-states).
+    Inlined to avoid double bus_read that cpd()+check would cause."""
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles)
-    cpd(cpu)
-    result = (regs.A - value) & 0xFF
+    a = regs.A
+    result = (a - value) & 0xFF
+    regs.HL = (regs.HL - 1) & 0xFFFF
+    regs.BC = (regs.BC - 1) & 0xFFFF
+    cpu.cycles += 16
+    _compute_cpi_flags(regs, a, value, regs.BC)
     if regs.BC != 0 and result != 0:
         cpu._pc_modified = True
         return 21

@@ -49,6 +49,49 @@ class InstructionDecoder:
 
     def __init__(self):
         self.cache: list = [None] * 65536
+        self._dd_fallback = self._build_dd_fallback_table()
+        self._fd_fallback = self._build_fd_fallback_table()
+
+    @staticmethod
+    def _make_dd_fd_fallback(handler, length):
+        """Create a named fallback wrapper for unknown DD/FD prefixed instructions."""
+
+        def fallback(cpu):
+            old_pc = cpu.regs.PC
+            cpu.regs.PC = (old_pc + 1) & 0xFFFF
+            result = handler(cpu)
+            cpu.regs.PC = old_pc
+            return result
+
+        return fallback
+
+    def _build_dd_fallback_table(self):
+        table = [None] * 256
+        for opcode in range(256):
+            entry = get_base_opcode(opcode)
+            if entry:
+                handler, cycles, length, mnemonic = entry
+                table[opcode] = (
+                    self._make_dd_fd_fallback(handler, length),
+                    cycles + 4,
+                    length + 1,
+                    f"(DD) {mnemonic}",
+                )
+        return table
+
+    def _build_fd_fallback_table(self):
+        table = [None] * 256
+        for opcode in range(256):
+            entry = get_base_opcode(opcode)
+            if entry:
+                handler, cycles, length, mnemonic = entry
+                table[opcode] = (
+                    self._make_dd_fd_fallback(handler, length),
+                    cycles + 4,
+                    length + 1,
+                    f"(FD) {mnemonic}",
+                )
+        return table
 
     # -------------------------------------------------------------------------
     # Decoding
@@ -95,22 +138,10 @@ class InstructionDecoder:
                 handler, cycles, length, mnemonic = entry
                 return MicroOp(handler, cycles, length, mnemonic)
             # Unknown DD prefix: fall through to base opcode (undocumented behaviour)
-            entry = get_base_opcode(dd_op)
-            if entry:
-                handler, cycles, length, mnemonic = entry
-
-                # DD prefix adds 1 byte to instruction length
-                # Wrap handler to skip the prefix byte when reading immediates
-                def dd_fallback_wrapper(cpu: "Z80CPU") -> int:
-                    old_pc = cpu.regs.PC
-                    cpu.regs.PC = (cpu.regs.PC + 1) & 0xFFFF
-                    result = handler(cpu)
-                    cpu.regs.PC = old_pc
-                    return result
-
-                return MicroOp(
-                    dd_fallback_wrapper, cycles + 4, length + 1, f"(DD) {mnemonic}"
-                )
+            fallback = self._dd_fallback[dd_op]
+            if fallback:
+                handler, cycles, length, mnemonic = fallback
+                return MicroOp(handler, cycles, length, mnemonic)
             return MicroOp(nop, 4, 2, f"NOP* (DD {dd_op:02X})")
 
         elif opcode == 0xFD:
@@ -131,22 +162,10 @@ class InstructionDecoder:
                 handler, cycles, length, mnemonic = entry
                 return MicroOp(handler, cycles, length, mnemonic)
             # Unknown FD prefix: fall through to base opcode
-            entry = get_base_opcode(fd_op)
-            if entry:
-                handler, cycles, length, mnemonic = entry
-
-                # FD prefix adds 1 byte to instruction length
-                # Wrap handler to skip the prefix byte when reading immediates
-                def fd_fallback_wrapper(cpu: "Z80CPU") -> int:
-                    old_pc = cpu.regs.PC
-                    cpu.regs.PC = (cpu.regs.PC + 1) & 0xFFFF
-                    result = handler(cpu)
-                    cpu.regs.PC = old_pc
-                    return result
-
-                return MicroOp(
-                    fd_fallback_wrapper, cycles + 4, length + 1, f"(FD) {mnemonic}"
-                )
+            fallback = self._fd_fallback[fd_op]
+            if fallback:
+                handler, cycles, length, mnemonic = fallback
+                return MicroOp(handler, cycles, length, mnemonic)
             return MicroOp(nop, 4, 2, f"NOP* (FD {fd_op:02X})")
 
         else:
@@ -177,8 +196,7 @@ class InstructionDecoder:
         on the next fetch.  For bank switches use invalidate_range().
         """
         if addr is None:
-            for i in range(65536):
-                self.cache[i] = None
+            self.cache[:] = [None] * 65536
         else:
             # An instruction starting up to 3 bytes before *addr* could
             # span the written location, so flush the surrounding window.
@@ -207,8 +225,7 @@ class InstructionDecoder:
 
         if range_size >= 65536:
             # Whole address space — fastest path
-            for i in range(65536):
-                self.cache[i] = None
+            self.cache[:] = [None] * 65536
         else:
             self.cache[flush_start:flush_end] = [None] * range_size
 
