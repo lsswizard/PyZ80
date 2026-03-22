@@ -33,8 +33,8 @@ from ..flags import (
 from .ld8 import _get_indexed_addr
 
 # Precomputed masks to avoid `1 << bit` and `~(1 << bit)` on every BIT/SET/RES call
-_BIT_MASK  = tuple(1 << b for b in range(8))           # [1, 2, 4, 8, 16, 32, 64, 128]
-_RES_MASK  = tuple((~(1 << b)) & 0xFF for b in range(8))  # inverted, pre-masked to byte
+_BIT_MASK = tuple(1 << b for b in range(8))  # [1, 2, 4, 8, 16, 32, 64, 128]
+_RES_MASK = tuple((~(1 << b)) & 0xFF for b in range(8))  # inverted, pre-masked to byte
 
 
 def _rot_op_0(value: int, carry_flag: int) -> tuple[int, int]:

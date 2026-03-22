@@ -148,7 +148,7 @@ def cpd(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     cycles = cpu.cycles
     value = cpu._bus_read(regs.HL, cycles + 1)  # fix: was missing +1, matching cpi
-    cpu.cycles += 16                              # fix: was missing entirely
+    cpu.cycles += 16  # fix: was missing entirely
     result = (regs.A - value) & 0xFF
     regs.HL = (regs.HL - 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF

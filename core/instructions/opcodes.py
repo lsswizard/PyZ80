@@ -731,12 +731,8 @@ def _build_ixycb_opcode_table(is_iy: bool) -> list:
     return table
 
 
-DDCB_OPCODE_TABLE: list = (
-    _build_ixycb_opcode_table(False)
-)
-FDCB_OPCODE_TABLE: list = (
-    _build_ixycb_opcode_table(True)
-)
+DDCB_OPCODE_TABLE: list = _build_ixycb_opcode_table(False)
+FDCB_OPCODE_TABLE: list = _build_ixycb_opcode_table(True)
 
 _build_base_opcode_table()
 _build_cb_opcode_table()

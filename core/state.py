@@ -46,7 +46,7 @@ class CPUState:
     PC: int = 0
 
     # Interrupt and refresh registers
-    I: int = 0   # noqa: E741
+    I: int = 0  # noqa: E741
     R: int = 0
 
     # Interrupt flip-flops and mode
@@ -75,18 +75,31 @@ class CPUState:
     def to_dict(self) -> Dict[str, Any]:
         """Convert state to dictionary for serialisation."""
         return {
-            "A": self.A, "F": self.F,
-            "B": self.B, "C": self.C,
-            "D": self.D, "E": self.E,
-            "H": self.H, "L": self.L,
-            "Ap": self.Ap, "Fp": self.Fp,
-            "Bp": self.Bp, "Cp": self.Cp,
-            "Dp": self.Dp, "Ep": self.Ep,
-            "Hp": self.Hp, "Lp": self.Lp,
-            "IX": self.IX, "IY": self.IY,
-            "SP": self.SP, "PC": self.PC,
-            "I": self.I,   "R": self.R,
-            "IFF1": self.IFF1, "IFF2": self.IFF2, "IM": self.IM,
+            "A": self.A,
+            "F": self.F,
+            "B": self.B,
+            "C": self.C,
+            "D": self.D,
+            "E": self.E,
+            "H": self.H,
+            "L": self.L,
+            "Ap": self.Ap,
+            "Fp": self.Fp,
+            "Bp": self.Bp,
+            "Cp": self.Cp,
+            "Dp": self.Dp,
+            "Ep": self.Ep,
+            "Hp": self.Hp,
+            "Lp": self.Lp,
+            "IX": self.IX,
+            "IY": self.IY,
+            "SP": self.SP,
+            "PC": self.PC,
+            "I": self.I,
+            "R": self.R,
+            "IFF1": self.IFF1,
+            "IFF2": self.IFF2,
+            "IM": self.IM,
             "EI_PENDING": self.EI_PENDING,
             "EI_JUST_RESOLVED": self.EI_JUST_RESOLVED,
             "Memptr": self.Memptr,
@@ -106,7 +119,7 @@ class CPUState:
         return cls(**{k: v for k, v in data.items() if k in known})
 
     def copy(self) -> "CPUState":
-        return copy.copy(self)   # dataclass fields are all scalars — shallow is fine
+        return copy.copy(self)  # dataclass fields are all scalars — shallow is fine
 
     def __str__(self) -> str:
         return (
@@ -120,14 +133,22 @@ class CPUState:
     def flags_str(self) -> str:
         """Return active flag names as a compact string."""
         parts = []
-        if self.F & 0x80: parts.append("S")
-        if self.F & 0x40: parts.append("Z")
-        if self.F & 0x20: parts.append("5")
-        if self.F & 0x10: parts.append("H")
-        if self.F & 0x08: parts.append("3")
-        if self.F & 0x04: parts.append("P")
-        if self.F & 0x02: parts.append("N")
-        if self.F & 0x01: parts.append("C")
+        if self.F & 0x80:
+            parts.append("S")
+        if self.F & 0x40:
+            parts.append("Z")
+        if self.F & 0x20:
+            parts.append("5")
+        if self.F & 0x10:
+            parts.append("H")
+        if self.F & 0x08:
+            parts.append("3")
+        if self.F & 0x04:
+            parts.append("P")
+        if self.F & 0x02:
+            parts.append("N")
+        if self.F & 0x01:
+            parts.append("C")
         return "".join(parts) if parts else "----"
 
 
