@@ -37,12 +37,13 @@ def jp_cc_nn(cpu: "Z80CPU", condition: int) -> int:
 
 def jr_e(cpu: "Z80CPU") -> int:
     """JR e - Relative jump (12 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles + 1)
-    offset = offset if offset < 128 else offset - 256
+    regs = cpu.regs
+    pc = regs.PC
+    offset = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
+    if offset >= 128:
+        offset -= 256
     cpu.cycles += 12
-    cpu.regs.PC = (pc + 2 + offset) & 0xFFFF
+    regs.PC = (pc + 2 + offset) & 0xFFFF
     cpu._pc_modified = True
     return 12
 
@@ -50,12 +51,13 @@ def jr_e(cpu: "Z80CPU") -> int:
 def jr_cc_e(cpu: "Z80CPU", condition: int) -> int:
     """JR cc,e - Conditional relative jump (7/12 T-states)"""
     if cpu.check_condition(condition):
-        pc = cpu.regs.PC
-        cycles = cpu.cycles
-        offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles + 1)
-        offset = offset if offset < 128 else offset - 256
+        regs = cpu.regs
+        pc = regs.PC
+        offset = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
+        if offset >= 128:
+            offset -= 256
         cpu.cycles += 12
-        cpu.regs.PC = (pc + 2 + offset) & 0xFFFF
+        regs.PC = (pc + 2 + offset) & 0xFFFF
         cpu._pc_modified = True
         return 12
     return 7
@@ -71,12 +73,13 @@ def jp_hl(cpu: "Z80CPU") -> int:
 def djnz_e(cpu: "Z80CPU") -> int:
     """DJNZ e - Decrement B and jump if not zero (8/13 T-states)"""
     regs = cpu.regs
-    regs.B = (regs.B - 1) & 0xFF
-    if regs.B != 0:
+    b = (regs.B - 1) & 0xFF
+    regs.B = b
+    if b != 0:
         pc = regs.PC
-        cycles = cpu.cycles
-        offset = cpu._bus_read((pc + 1) & 0xFFFF, cycles + 1)
-        offset = offset if offset < 128 else offset - 256
+        offset = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
+        if offset >= 128:
+            offset -= 256
         cpu.cycles += 13
         regs.PC = (pc + 2 + offset) & 0xFFFF
         cpu._pc_modified = True
@@ -88,8 +91,7 @@ def call_nn(cpu: "Z80CPU") -> int:
     """CALL nn - Call subroutine (17 T-states)"""
     regs = cpu.regs
     addr = _read_addr_from_pc(cpu, 1)
-    next_pc = (regs.PC + 3) & 0xFFFF
-    _push_word(cpu, next_pc)
+    _push_word(cpu, (regs.PC + 3) & 0xFFFF)
     regs.PC = addr
     cpu._pc_modified = True
     return 17
@@ -121,8 +123,7 @@ def ret_cc(cpu: "Z80CPU", condition: int) -> int:
 def rst_p(cpu: "Z80CPU", addr: int) -> int:
     """RST p - Restart (call to page 0) (11 T-states)"""
     regs = cpu.regs
-    return_addr = (regs.PC + 1) & 0xFFFF
-    _push_word(cpu, return_addr)
+    _push_word(cpu, (regs.PC + 1) & 0xFFFF)
     regs.PC = addr
     cpu._pc_modified = True
     return 11
@@ -145,7 +146,8 @@ def retn(cpu: "Z80CPU") -> int:
 def jp_ix(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """JP (IX/IY) (8 T-states)"""
     regs = cpu.regs
-    regs.Memptr = regs.IY if is_iy else regs.IX
-    regs.PC = regs.IY if is_iy else regs.IX
+    target = regs.IY if is_iy else regs.IX
+    regs.Memptr = target
+    regs.PC = target
     cpu._pc_modified = True
     return 8

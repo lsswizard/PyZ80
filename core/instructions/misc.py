@@ -30,41 +30,45 @@ from ..flags import (
 
 def daa(cpu: "Z80CPU") -> int:
     """DAA - Decimal Adjust Accumulator (4 T-states)"""
-    cpu.regs.A, cpu.regs.F = get_daa_result(cpu.regs.A, cpu.regs.F)
+    regs = cpu.regs
+    regs.A, regs.F = get_daa_result(regs.A, regs.F)
     return 4
 
 
 def cpl(cpu: "Z80CPU") -> int:
     """CPL - Complement A (4 T-states)"""
-    cpu.regs.A = (~cpu.regs.A) & 0xFF
-    cpu.regs.F = (
-        (cpu.regs.F & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C))
+    regs = cpu.regs
+    regs.A = (~regs.A) & 0xFF
+    regs.F = (
+        (regs.F & (FLAG_S | FLAG_Z | FLAG_PV | FLAG_C))
         | FLAG_H
         | FLAG_N
-        | (cpu.regs.A & (FLAG_F3 | FLAG_F5))
+        | (regs.A & (FLAG_F3 | FLAG_F5))
     )
     return 4
 
 
 def ccf(cpu: "Z80CPU") -> int:
     """CCF - Complement Carry Flag (4 T-states)"""
-    old_c = cpu.regs.F & FLAG_C
-    cpu.regs.F = (cpu.regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | (
-        cpu.regs.A & (FLAG_F3 | FLAG_F5)
-    )
+    regs = cpu.regs
+    old_c = regs.F & FLAG_C
+    # Preserve S, Z, PV; undocumented F3/F5 come from A
+    f = (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | (regs.A & (FLAG_F3 | FLAG_F5))
     if old_c:
-        cpu.regs.F |= FLAG_H
-    if not old_c:
-        cpu.regs.F |= FLAG_C
+        f |= FLAG_H       # old carry becomes H
+    else:
+        f |= FLAG_C       # toggle carry on
+    regs.F = f
     return 4
 
 
 def scf(cpu: "Z80CPU") -> int:
     """SCF - Set Carry Flag (4 T-states)"""
-    cpu.regs.F = (
-        (cpu.regs.F & (FLAG_S | FLAG_Z | FLAG_PV))
+    regs = cpu.regs
+    regs.F = (
+        (regs.F & (FLAG_S | FLAG_Z | FLAG_PV))
         | FLAG_C
-        | (cpu.regs.A & (FLAG_F3 | FLAG_F5))
+        | (regs.A & (FLAG_F3 | FLAG_F5))
     )
     return 4
 
@@ -83,24 +87,27 @@ def halt(cpu: "Z80CPU") -> int:
 
 def di(cpu: "Z80CPU") -> int:
     """DI - Disable interrupts (4 T-states)"""
-    cpu.regs.IFF1 = False
-    cpu.regs.IFF2 = False
-    cpu.regs.EI_PENDING = False
+    regs = cpu.regs
+    regs.IFF1 = False
+    regs.IFF2 = False
+    regs.EI_PENDING = False
     return 4
 
 
 def ei(cpu: "Z80CPU") -> int:
     """EI - Enable interrupts (delayed by one instruction) (4 T-states)"""
-    cpu.regs.EI_PENDING = True
-    cpu.regs.EI_JUST_RESOLVED = False
+    regs = cpu.regs
+    regs.EI_PENDING = True
+    regs.EI_JUST_RESOLVED = False
     return 4
 
 
 def neg(cpu: "Z80CPU") -> int:
     """NEG - Negate A (8 T-states)"""
-    a = cpu.regs.A
-    cpu.regs.A = (-a) & 0xFF
-    cpu.regs.F = get_sub_flags(0, a)
+    regs = cpu.regs
+    a = regs.A
+    regs.A = (-a) & 0xFF
+    regs.F = get_sub_flags(0, a)
     return 8
 
 
