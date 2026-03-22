@@ -2204,6 +2204,130 @@ class TestTiming:
         write_program(cpu, [0xED, 0xB0])
         assert cpu.step() == 16
 
+    def test_ldd_timing(self, cpu):
+        """LDD — transfer and decrement takes 16 cycles."""
+        cpu.regs.HL = 0x1000
+        cpu.regs.DE = 0x2000
+        cpu.regs.BC = 0x0002
+        cpu.bus.bus_write(0x1000, 0x01, cpu.cycles)
+        write_program(cpu, [0xED, 0xA8])
+        assert cpu.step() == 16
+
+    def test_lddr_repeating_timing(self, cpu):
+        """LDDR — repeating iteration takes 21 cycles."""
+        cpu.regs.HL = 0x1001
+        cpu.regs.DE = 0x2001
+        cpu.regs.BC = 0x0002
+        cpu.bus.bus_write(0x1001, 0x01, cpu.cycles)
+        cpu.bus.bus_write(0x1000, 0x02, cpu.cycles)
+        write_program(cpu, [0xED, 0xB8])
+        assert cpu.step() == 21
+
+    def test_lddr_final_timing(self, cpu):
+        """LDDR — final iteration takes 16 cycles."""
+        cpu.regs.HL = 0x1000
+        cpu.regs.DE = 0x2000
+        cpu.regs.BC = 0x0001
+        cpu.bus.bus_write(0x1000, 0x01, cpu.cycles)
+        write_program(cpu, [0xED, 0xB8])
+        assert cpu.step() == 16
+
+    def test_cpi_timing(self, cpu):
+        """CPI — compare and increment takes 16 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1000
+        cpu.regs.BC = 0x0002
+        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
+        write_program(cpu, [0xED, 0xA1])
+        assert cpu.step() == 16
+
+    def test_cpd_timing(self, cpu):
+        """CPD — compare and decrement takes 16 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1000
+        cpu.regs.BC = 0x0002
+        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
+        write_program(cpu, [0xED, 0xA9])
+        assert cpu.step() == 16
+
+    def test_cpir_repeating_timing(self, cpu):
+        """CPIR — repeating iteration takes 21 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1000
+        cpu.regs.BC = 0x0002
+        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
+        cpu.bus.bus_write(0x1001, 0x00, cpu.cycles)
+        write_program(cpu, [0xED, 0xB1])
+        assert cpu.step() == 21
+
+    def test_cpir_final_timing(self, cpu):
+        """CPIR — final iteration (BC=1) takes 16 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1000
+        cpu.regs.BC = 0x0001
+        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
+        write_program(cpu, [0xED, 0xB1])
+        assert cpu.step() == 16
+
+    def test_cpir_match_on_last_byte_timing(self, cpu):
+        """CPIR — match on last byte (BC=1) takes 16 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1000
+        cpu.regs.BC = 0x0001
+        cpu.bus.bus_write(0x1000, 0x42, cpu.cycles)
+        write_program(cpu, [0xED, 0xB1])
+        assert cpu.step() == 16
+
+    def test_cpir_no_match_bc3_timing(self, cpu):
+        """CPIR — no match, BC=3, first iteration takes 21 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1000
+        cpu.regs.BC = 0x0003
+        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
+        cpu.bus.bus_write(0x1001, 0x00, cpu.cycles)
+        cpu.bus.bus_write(0x1002, 0x00, cpu.cycles)
+        write_program(cpu, [0xED, 0xB1])
+        assert cpu.step() == 21
+
+    def test_cpdr_repeating_timing(self, cpu):
+        """CPDR — repeating iteration takes 21 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1001
+        cpu.regs.BC = 0x0002
+        cpu.bus.bus_write(0x1001, 0x00, cpu.cycles)
+        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
+        write_program(cpu, [0xED, 0xB9])
+        assert cpu.step() == 21
+
+    def test_cpdr_final_timing(self, cpu):
+        """CPDR — final iteration (BC=1) takes 16 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1000
+        cpu.regs.BC = 0x0001
+        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
+        write_program(cpu, [0xED, 0xB9])
+        assert cpu.step() == 16
+
+    def test_cpdr_match_on_last_byte_timing(self, cpu):
+        """CPDR — match on last byte (BC=1) takes 16 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1000
+        cpu.regs.BC = 0x0001
+        cpu.bus.bus_write(0x1000, 0x42, cpu.cycles)
+        write_program(cpu, [0xED, 0xB9])
+        assert cpu.step() == 16
+
+    def test_cpdr_no_match_bc3_timing(self, cpu):
+        """CPDR — no match, BC=3, first iteration takes 21 cycles."""
+        cpu.regs.A = 0x42
+        cpu.regs.HL = 0x1002
+        cpu.regs.BC = 0x0003
+        cpu.bus.bus_write(0x1002, 0x00, cpu.cycles)
+        cpu.bus.bus_write(0x1001, 0x00, cpu.cycles)
+        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
+        write_program(cpu, [0xED, 0xB9])
+        assert cpu.step() == 21
+
     @pytest.mark.parametrize(
         "program,mnemonic,expected_cycles",
         [
@@ -2689,6 +2813,114 @@ class TestIndexed:
         write_program(cpu, [0xFD, 0xF9])
         cpu.step()
         assert cpu.regs.SP == 0x5000
+
+    def test_ld_ixh_ixh(self, cpu):
+        """LD IXH,IXH — undocumented self-copy no-op (DD 64)."""
+        cpu.regs.IX = 0xABCD
+        write_program(cpu, [0xDD, 0x64])
+        cycles = cpu.step()
+        assert cpu.regs.IXh == 0xAB
+        assert cycles == 8
+
+    def test_ld_ixl_ixl(self, cpu):
+        """LD IXL,IXL — undocumented self-copy no-op (DD 6D)."""
+        cpu.regs.IX = 0xABCD
+        write_program(cpu, [0xDD, 0x6D])
+        cycles = cpu.step()
+        assert cpu.regs.IXl == 0xCD
+        assert cycles == 8
+
+    def test_ld_ixh_ixl(self, cpu):
+        """LD IXH,IXL — copy IXL to IXH (DD 65)."""
+        cpu.regs.IX = 0xABCD
+        write_program(cpu, [0xDD, 0x65])
+        cycles = cpu.step()
+        assert cpu.regs.IXh == 0xCD
+        assert cycles == 8
+
+    def test_ld_ixl_ixh(self, cpu):
+        """LD IXL,IXH — copy IXH to IXL (DD 6C)."""
+        cpu.regs.IX = 0xABCD
+        write_program(cpu, [0xDD, 0x6C])
+        cycles = cpu.step()
+        assert cpu.regs.IXl == 0xAB
+        assert cycles == 8
+
+    def test_ld_iyh_iyh(self, cpu):
+        """LD IYH,IYH — undocumented self-copy no-op (FD 64)."""
+        cpu.regs.IY = 0xABCD
+        write_program(cpu, [0xFD, 0x64])
+        cycles = cpu.step()
+        assert cpu.regs.IYh == 0xAB
+        assert cycles == 8
+
+    def test_ld_iyl_iyl(self, cpu):
+        """LD IYL,IYL — undocumented self-copy no-op (FD 6D)."""
+        cpu.regs.IY = 0xABCD
+        write_program(cpu, [0xFD, 0x6D])
+        cycles = cpu.step()
+        assert cpu.regs.IYl == 0xCD
+        assert cycles == 8
+
+    def test_ld_iyh_iyl(self, cpu):
+        """LD IYH,IYL — copy IYL to IYH (FD 65)."""
+        cpu.regs.IY = 0xABCD
+        write_program(cpu, [0xFD, 0x65])
+        cycles = cpu.step()
+        assert cpu.regs.IYh == 0xCD
+        assert cycles == 8
+
+    def test_ld_iyl_iyh(self, cpu):
+        """LD IYL,IYH — copy IYH to IYL (FD 6C)."""
+        cpu.regs.IY = 0xABCD
+        write_program(cpu, [0xFD, 0x6C])
+        cycles = cpu.step()
+        assert cpu.regs.IYl == 0xAB
+        assert cycles == 8
+
+    def test_ld_ixh_n(self, cpu):
+        """LD IXH,n — load immediate into IXH (DD 26)."""
+        cpu.regs.IX = 0x0000
+        write_program(cpu, [0xDD, 0x26, 0x42])
+        cpu.step()
+        assert cpu.regs.IXh == 0x42
+
+    def test_ld_ixl_n(self, cpu):
+        """LD IXL,n — load immediate into IXL (DD 2E)."""
+        cpu.regs.IX = 0x0000
+        write_program(cpu, [0xDD, 0x2E, 0x42])
+        cpu.step()
+        assert cpu.regs.IXl == 0x42
+
+    def test_ld_ixh_r(self, cpu):
+        """LD IXH,B — load register into IXH (DD 60)."""
+        cpu.regs.IX = 0x0000
+        cpu.regs.B = 0x42
+        write_program(cpu, [0xDD, 0x60])
+        cpu.step()
+        assert cpu.regs.IXh == 0x42
+
+    def test_ld_ixl_r(self, cpu):
+        """LD IXL,C — load register into IXL (DD 69)."""
+        cpu.regs.IX = 0x0000
+        cpu.regs.C = 0x42
+        write_program(cpu, [0xDD, 0x69])
+        cpu.step()
+        assert cpu.regs.IXl == 0x42
+
+    def test_ld_r_ixh(self, cpu):
+        """LD B,IXH — load IXH into register (DD 44)."""
+        cpu.regs.IX = 0x4200
+        write_program(cpu, [0xDD, 0x44])
+        cpu.step()
+        assert cpu.regs.B == 0x42
+
+    def test_ld_r_ixl(self, cpu):
+        """LD C,IXL — load IXL into register (DD 4D)."""
+        cpu.regs.IX = 0x0042
+        write_program(cpu, [0xDD, 0x4D])
+        cpu.step()
+        assert cpu.regs.C == 0x42
 
     @pytest.mark.parametrize(
         "reg,opcode_suffix",
@@ -3546,13 +3778,46 @@ class TestDDCBFDCB:
         cpu.step()
         assert flag_clear(cpu, FLAG_Z)
 
-    def test_ddcb_timing(self, cpu):
-        """DDCB instruction takes 23 cycles."""
-        cpu.regs.IX = 0x1000
-        cpu.bus.bus_write(0x1000, 0x00, cpu.cycles)
-        write_program(cpu, [0xDD, 0xCB, 0x00, 0x06])
+    @pytest.mark.parametrize(
+        "program,mnemonic,expected_cycles",
+        [
+            # DDCB — IX indexed
+            ([0xDD, 0xCB, 0x00, 0x06], "RLC (IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0x0E], "RRC (IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0x16], "RL (IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0x1E], "RR (IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0x26], "SLA (IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0x2E], "SRA (IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0x3E], "SRL (IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0x46], "BIT 0,(IX+0)", 20),
+            ([0xDD, 0xCB, 0x00, 0x7E], "BIT 7,(IX+0)", 20),
+            ([0xDD, 0xCB, 0x00, 0xC6], "SET 0,(IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0xFE], "SET 7,(IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0x86], "RES 0,(IX+0)", 23),
+            ([0xDD, 0xCB, 0x00, 0xBE], "RES 7,(IX+0)", 23),
+            # FDCB — IY indexed
+            ([0xFD, 0xCB, 0x00, 0x06], "RLC (IY+0)", 23),
+            ([0xFD, 0xCB, 0x00, 0x46], "BIT 0,(IY+0)", 20),
+            ([0xFD, 0xCB, 0x00, 0xC6], "SET 0,(IY+0)", 23),
+            ([0xFD, 0xCB, 0x00, 0x86], "RES 0,(IY+0)", 23),
+        ],
+    )
+    def test_ddcb_fdcb_timing(self, cpu, program, mnemonic, expected_cycles):
+        """DDCB/FDCB indexed instruction timing."""
+        if program[0] == 0xDD:
+            cpu.regs.IX = 0x1000
+            addr = 0x1000  # IX + 0
+        else:
+            cpu.regs.IY = 0x1000
+            addr = 0x1000  # IY + 0
+        cpu.bus.bus_write(addr, 0x00, cpu.cycles)
+        for _i, _b in enumerate(program):
+            cpu.bus.bus_write(0 + _i, _b, cpu.cycles)
+        cpu.regs.PC = 0
         cycles = cpu.step()
-        assert cycles == 23
+        assert cycles == expected_cycles, (
+            f"{mnemonic}: expected {expected_cycles}, got {cycles}"
+        )
 
 
 # ============================================================

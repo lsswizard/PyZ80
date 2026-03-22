@@ -20,12 +20,13 @@ def _reg_name(reg: int) -> str:
     return _REG_NAMES[reg]
 
 
-# Opcode tables
-BASE_OPCODE_TABLE: dict[int, tuple[Callable, int, int, str]] = {}
-CB_OPCODE_TABLE: dict[int, tuple[Callable, int, int, str]] = {}
-ED_OPCODE_TABLE: dict[int, tuple[Callable, int, int, str]] = {}
-DD_OPCODE_TABLE: dict[int, tuple[Callable, int, int, str]] = {}
-FD_OPCODE_TABLE: dict[int, tuple[Callable, int, int, str]] = {}
+# Opcode tables — list[256] gives O(1) index access with no hash overhead.
+# None entries represent undefined/unimplemented opcodes.
+BASE_OPCODE_TABLE: list = [None] * 256
+CB_OPCODE_TABLE: list = [None] * 256
+ED_OPCODE_TABLE: list = [None] * 256
+DD_OPCODE_TABLE: list = [None] * 256
+FD_OPCODE_TABLE: list = [None] * 256
 
 
 def _build_base_opcode_table():
@@ -495,8 +496,8 @@ def _build_ed_opcode_table():
     ED_OPCODE_TABLE[0x67] = (rrd, 18, 2, "RRD")
 
     # Undefined ED opcodes - treat as NOPs with 8 cycles
-    for op in range(0x00, 0x100):
-        if op not in ED_OPCODE_TABLE:
+    for op in range(0x100):
+        if ED_OPCODE_TABLE[op] is None:
             ED_OPCODE_TABLE[op] = (nop, 8, 2, f"NOP* (ED {op:02X})")
 
 
@@ -536,7 +537,7 @@ def _build_dd_opcode_table():
     DD_OPCODE_TABLE[0x61] = (lambda cpu: ld_ixh_r(cpu, 1, False), 8, 2, "LD IXH,C")
     DD_OPCODE_TABLE[0x62] = (lambda cpu: ld_ixh_r(cpu, 2, False), 8, 2, "LD IXH,D")
     DD_OPCODE_TABLE[0x63] = (lambda cpu: ld_ixh_r(cpu, 3, False), 8, 2, "LD IXH,E")
-    DD_OPCODE_TABLE[0x64] = (lambda cpu: ld_ixh_ixl(cpu, False), 8, 2, "LD IXH,IXH")
+    DD_OPCODE_TABLE[0x64] = (lambda cpu: ld_ixh_ixh(cpu, False), 8, 2, "LD IXH,IXH")
     DD_OPCODE_TABLE[0x65] = (lambda cpu: ld_ixh_ixl(cpu, False), 8, 2, "LD IXH,IXL")
     DD_OPCODE_TABLE[0x67] = (lambda cpu: ld_ixh_r(cpu, 7, False), 8, 2, "LD IXH,A")
     DD_OPCODE_TABLE[0x68] = (lambda cpu: ld_ixl_r(cpu, 0, False), 8, 2, "LD IXL,B")
@@ -630,7 +631,7 @@ def _build_fd_opcode_table():
     FD_OPCODE_TABLE[0x61] = (lambda cpu: ld_ixh_r(cpu, 1, True), 8, 2, "LD IYH,C")
     FD_OPCODE_TABLE[0x62] = (lambda cpu: ld_ixh_r(cpu, 2, True), 8, 2, "LD IYH,D")
     FD_OPCODE_TABLE[0x63] = (lambda cpu: ld_ixh_r(cpu, 3, True), 8, 2, "LD IYH,E")
-    FD_OPCODE_TABLE[0x64] = (lambda cpu: ld_ixh_ixl(cpu, True), 8, 2, "LD IYH,IYH")
+    FD_OPCODE_TABLE[0x64] = (lambda cpu: ld_ixh_ixh(cpu, True), 8, 2, "LD IYH,IYH")
     FD_OPCODE_TABLE[0x65] = (lambda cpu: ld_ixh_ixl(cpu, True), 8, 2, "LD IYH,IYL")
     FD_OPCODE_TABLE[0x67] = (lambda cpu: ld_ixh_r(cpu, 7, True), 8, 2, "LD IYH,A")
     FD_OPCODE_TABLE[0x68] = (lambda cpu: ld_ixl_r(cpu, 0, True), 8, 2, "LD IYL,B")
@@ -688,8 +689,8 @@ def _build_fd_opcode_table():
             )
 
 
-def _build_ixycb_opcode_table(is_iy: bool) -> dict:
-    table: dict = {}
+def _build_ixycb_opcode_table(is_iy: bool) -> list:
+    table: list = [None] * 256
     prefix = "IY" if is_iy else "IX"
     rot_names = ["RLC", "RRC", "RL", "RR", "SLA", "SRA", "SLL", "SRL"]
     for opcode in range(256):
@@ -730,10 +731,10 @@ def _build_ixycb_opcode_table(is_iy: bool) -> dict:
     return table
 
 
-DDCB_OPCODE_TABLE: dict[int, tuple[Callable, int, int, str]] = (
+DDCB_OPCODE_TABLE: list = (
     _build_ixycb_opcode_table(False)
 )
-FDCB_OPCODE_TABLE: dict[int, tuple[Callable, int, int, str]] = (
+FDCB_OPCODE_TABLE: list = (
     _build_ixycb_opcode_table(True)
 )
 
@@ -757,28 +758,28 @@ FD_OPCODE_TABLE[0x52] = (lambda cpu: sbc_ix_rr(cpu, 1, True), 15, 2, "SBC IY,DE"
 
 
 def get_base_opcode(opcode: int) -> Optional[tuple]:
-    return BASE_OPCODE_TABLE.get(opcode)
+    return BASE_OPCODE_TABLE[opcode]
 
 
 def get_cb_opcode(opcode: int) -> Optional[tuple]:
-    return CB_OPCODE_TABLE.get(opcode)
+    return CB_OPCODE_TABLE[opcode]
 
 
 def get_ed_opcode(opcode: int) -> Optional[tuple]:
-    return ED_OPCODE_TABLE.get(opcode)
+    return ED_OPCODE_TABLE[opcode]
 
 
 def get_dd_opcode(opcode: int) -> Optional[tuple]:
-    return DD_OPCODE_TABLE.get(opcode)
+    return DD_OPCODE_TABLE[opcode]
 
 
 def get_fd_opcode(opcode: int) -> Optional[tuple]:
-    return FD_OPCODE_TABLE.get(opcode)
+    return FD_OPCODE_TABLE[opcode]
 
 
 def get_ddcb_opcode(opcode: int) -> Optional[tuple]:
-    return DDCB_OPCODE_TABLE.get(opcode)
+    return DDCB_OPCODE_TABLE[opcode]
 
 
 def get_fdcb_opcode(opcode: int) -> Optional[tuple]:
-    return FDCB_OPCODE_TABLE.get(opcode)
+    return FDCB_OPCODE_TABLE[opcode]

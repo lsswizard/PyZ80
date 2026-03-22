@@ -147,7 +147,8 @@ def cpd(cpu: "Z80CPU") -> int:
     """CPD - Compare and decrement (16 T-states)"""
     regs = cpu.regs
     cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles)
+    value = cpu._bus_read(regs.HL, cycles + 1)  # fix: was missing +1, matching cpi
+    cpu.cycles += 16                              # fix: was missing entirely
     result = (regs.A - value) & 0xFF
     regs.HL = (regs.HL - 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
@@ -172,7 +173,7 @@ def cpdr(cpu: "Z80CPU") -> int:
     Inlined to avoid double bus_read that cpd()+check would cause."""
     regs = cpu.regs
     cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles)
+    value = cpu._bus_read(regs.HL, cycles + 1)  # fix: was missing +1, matching cpir
     a = regs.A
     result = (a - value) & 0xFF
     regs.HL = (regs.HL - 1) & 0xFFFF

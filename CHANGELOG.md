@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-03-22
+
+### Bug Fixes
+- **Block compare timing (CPD/CPDR)**: Fixed missing `+1` T-state offset in bus read for `cpd` and `cpdr`, matching `cpi`/`cpir` timing
+- **CPD cycle accounting**: Added missing `cpu.cycles += 16` in `cpd` instruction
+- **Undocumented LD IXH,IXH opcode**: Fixed DD 64 dispatching to `ld_ixh_ixh` instead of `ld_ixh_ixl` (same fix for FD 64)
+- **Duplicate DEC r function**: Removed duplicate `dec_r` definition in alu8.py
+
+### Performance Improvements
+- **Bit operation masks**: Precomputed `_BIT_MASK` and `_RES_MASK` tuples for BIT/SET/RES instructions, replacing per-call `1 << bit` and `~(1 << bit)` operations
+- **Opcode table O(1) access**: Changed all opcode tables (BASE, CB, ED, DD, FD, DDCB, FDCB) from dictionaries to fixed-size lists[256], eliminating hash overhead
+- **Undocumented IXH/IXL self-copy**: Added `ld_ixh_ixh` and `ld_ixl_ixl` no-op functions (8 T-states) for completeness
+
+### Testing (860 → 903 tests)
+- **Block instruction timing**: Added 13 new timing tests for LDD, LDDR, CPI, CPD, CPIR, CPDR covering 16-cycle (final/match) and 21-cycle (repeating) cases
+- **Undocumented IXH/IXL instructions**: Added 14 tests for self-copy, cross-copy, immediate load, register transfer, and IY variants
+- **DDCB/FDCB timing**: Replaced single timing test with 18 parametrized cases covering RLC/RRC/RL/RR/SLA/SRA/SRL (23 cycles), SET/RES (23 cycles), and BIT (20 cycles) for both IX and IY indexed addressing
+
+### Verified
+- All 903 tests pass
+- Cycle timing verified against Z80 CPU User Manual (UM0080)
+
 ## [1.4.0] - 2026-03-17
 
 ### Performance Improvements

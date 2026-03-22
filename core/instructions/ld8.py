@@ -252,6 +252,16 @@ def ld_ixl_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
     return 8
 
 
+def ld_ixh_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """LD IXH,IXH / LD IYH,IYH - Undocumented self-copy no-op (8 T-states)"""
+    return 8
+
+
+def ld_ixl_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
+    """LD IXL,IXL / LD IYL,IYL - Undocumented self-copy no-op (8 T-states)"""
+    return 8
+
+
 def ld_ixh_r(cpu: "Z80CPU", src: int, is_iy: bool = False) -> int:
     """LD IXH/IYH,r - Undocumented (8 T-states)"""
     value = cpu.get_reg8(src)

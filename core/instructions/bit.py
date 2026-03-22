@@ -32,6 +32,10 @@ from ..flags import (
 )
 from .ld8 import _get_indexed_addr
 
+# Precomputed masks to avoid `1 << bit` and `~(1 << bit)` on every BIT/SET/RES call
+_BIT_MASK  = tuple(1 << b for b in range(8))           # [1, 2, 4, 8, 16, 32, 64, 128]
+_RES_MASK  = tuple((~(1 << b)) & 0xFF for b in range(8))  # inverted, pre-masked to byte
+
 
 def _rot_op_0(value: int, carry_flag: int) -> tuple[int, int]:
     carry = (value >> 7) & 1
@@ -476,7 +480,7 @@ def bit_n_r(cpu: "Z80CPU", bit: int, src: int) -> int:
     """BIT n,r - Test bit n in register (8 T-states)"""
     regs = cpu.regs
     value = cpu.get_reg8(src)
-    test_result = value & (1 << bit)
+    test_result = value & _BIT_MASK[bit]
     regs.F = FLAG_H | (regs.F & FLAG_C)
     if test_result == 0:
         regs.F |= FLAG_Z | FLAG_PV
@@ -492,7 +496,7 @@ def bit_n_hl(cpu: "Z80CPU", bit: int) -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles)
-    test_result = value & (1 << bit)
+    test_result = value & _BIT_MASK[bit]
     regs.Memptr = addr
     regs.F = FLAG_H | (regs.F & FLAG_C)
     if test_result == 0:
@@ -505,8 +509,7 @@ def bit_n_hl(cpu: "Z80CPU", bit: int) -> int:
 
 def set_n_r(cpu: "Z80CPU", bit: int, dest: int) -> int:
     """SET n,r - Set bit n in register (8 T-states)"""
-    value = cpu.get_reg8(dest)
-    cpu.set_reg8(dest, value | (1 << bit))
+    cpu.set_reg8(dest, cpu.get_reg8(dest) | _BIT_MASK[bit])
     return 8
 
 
@@ -516,15 +519,14 @@ def set_n_hl(cpu: "Z80CPU", bit: int) -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles + 1)
-    cpu._bus_write(addr, value | (1 << bit), cycles + 4)
+    cpu._bus_write(addr, value | _BIT_MASK[bit], cycles + 4)
     cpu.cycles += 15
     return 15
 
 
 def res_n_r(cpu: "Z80CPU", bit: int, dest: int) -> int:
     """RES n,r - Reset bit n in register (8 T-states)"""
-    value = cpu.get_reg8(dest)
-    cpu.set_reg8(dest, value & ~(1 << bit))
+    cpu.set_reg8(dest, cpu.get_reg8(dest) & _RES_MASK[bit])
     return 8
 
 
@@ -534,7 +536,7 @@ def res_n_hl(cpu: "Z80CPU", bit: int) -> int:
     cycles = cpu.cycles
     addr = regs.HL
     value = cpu._bus_read(addr, cycles + 1)
-    cpu._bus_write(addr, value & ~(1 << bit), cycles + 4)
+    cpu._bus_write(addr, value & _RES_MASK[bit], cycles + 4)
     cpu.cycles += 15
     return 15
 
@@ -545,7 +547,7 @@ def _ixycb_bit_n(cpu: "Z80CPU", bit: int, is_iy: bool) -> int:
     cycles = cpu.cycles
     addr = _get_indexed_addr(cpu, is_iy)
     value = cpu._bus_read(addr, cycles)
-    test_result = value & (1 << bit)
+    test_result = value & _BIT_MASK[bit]
     regs.F = FLAG_H | (regs.F & FLAG_C)
     if test_result == 0:
         regs.F |= FLAG_Z | FLAG_PV
@@ -560,7 +562,7 @@ def _ixycb_res_n(cpu: "Z80CPU", bit: int, dest: int, is_iy: bool) -> int:
     cycles = cpu.cycles
     addr = _get_indexed_addr(cpu, is_iy)
     value = cpu._bus_read(addr, cycles)
-    result = value & ~(1 << bit)
+    result = value & _RES_MASK[bit]
     cpu._bus_write(addr, result, cycles)
     if dest != 6:
         cpu.set_reg8(dest, result)
@@ -572,7 +574,7 @@ def _ixycb_set_n(cpu: "Z80CPU", bit: int, dest: int, is_iy: bool) -> int:
     cycles = cpu.cycles
     addr = _get_indexed_addr(cpu, is_iy)
     value = cpu._bus_read(addr, cycles)
-    result = value | (1 << bit)
+    result = value | _BIT_MASK[bit]
     cpu._bus_write(addr, result, cycles)
     if dest != 6:
         cpu.set_reg8(dest, result)

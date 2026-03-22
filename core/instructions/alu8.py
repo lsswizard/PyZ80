@@ -302,15 +302,6 @@ def dec_hl(cpu: "Z80CPU") -> int:
     return 11
 
 
-def dec_r(cpu: "Z80CPU", dest: int) -> int:
-    """DEC r - Decrement register (4 T-states)"""
-    value = cpu.get_reg8(dest)
-    new_value = (value - 1) & 0xFF
-    cpu.set_reg8(dest, new_value)
-    cpu.regs.F = (cpu.regs.F & FLAG_C) | get_dec_flags(value)
-    return 4
-
-
 def add_a_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """ADD A,IXH/IYH (8 T-states)"""
     regs = cpu.regs
