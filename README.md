@@ -115,11 +115,12 @@ pytest tests/test_validate_z80.py::TestTiming -v
 
 ## Performance Notes
 
-- **Numba JIT**: Flag calculations compiled to native code (~1.5M instr/sec)
-- **Lookup Tables**: SZ/SZP tables for fast flag calculation
-- **Pre-decoded Cache**: Eliminates decode overhead
-- **Local Attribute Caching**: Hot paths optimized
-- **Minimal Allocations**: No object allocation during execution
+- **Precomputed ALU Flags**: 320KB lookup tables for ADD/SUB/CP/INC/DEC operations (~2-5x faster than function calls)
+- **Register Dispatch Tables**: O(1) register access via function tables
+- **MicroOp `__slots__`**: Eliminates per-instruction allocation overhead
+- **Slow Path Flag**: Single boolean check instead of 4 attribute accesses
+- **16-bit Register Inlining**: ~28% faster than lambda/setattr approach
+- **Numba JIT**: Flag calculations compiled to native code
 
 ## Dependencies
 

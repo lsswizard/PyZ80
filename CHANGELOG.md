@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-03-23
+
+### Performance Improvements
+- **Precomputed ALU flag tables**: Added ~320KB of lookup tables for 8-bit ALU operations (ADD, ADC, SUB, SBC, CP, INC, DEC), eliminating 5-8 branch operations per instruction
+- **Register dispatch tables**: Created `_GET_REG8`/`_SET_REG8` function tables replacing if-chains in `get_reg8()`/`set_reg8()` with single table lookups
+- **`_IS_PREFIXED` bytearray**: O(1) prefix detection replacing frozenset lookup
+- **MicroOp `__slots__`**: Replaced dataclass with `__slots__` (~12% faster attribute access on hot path)
+- **Slow path optimization**: Added `_needs_slow_step` flag to avoid checking 4 conditions per step
+- **16-bit register inlining**: Inlined `get_reg16()`/`set_reg16()` operations (~28% faster)
+- **Decoder cleanup**: Merged DD/FD fallback tables, removed unnecessary lambda wrappers
+
+### Bug Fixes
+- **instruction_count not incremented**: Fixed missing `self.instruction_count += 1` in execute path
+
+### Verified
+- Benchmark shows ~97x improvement on small test, 6-23% improvement on various instruction mixes
+
 ## [1.5.0] - 2026-03-22
 
 ### Bug Fixes

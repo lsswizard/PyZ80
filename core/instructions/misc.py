@@ -24,7 +24,7 @@ from ..flags import (
     FLAG_F3,
     FLAG_F5,
     get_daa_result,
-    get_sub_flags,
+    SUB_FLAGS,  # precomputed table for NEG instruction
 )
 
 
@@ -55,9 +55,9 @@ def ccf(cpu: "Z80CPU") -> int:
     # Preserve S, Z, PV; undocumented F3/F5 come from A
     f = (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | (regs.A & (FLAG_F3 | FLAG_F5))
     if old_c:
-        f |= FLAG_H       # old carry becomes H
+        f |= FLAG_H  # old carry becomes H
     else:
-        f |= FLAG_C       # toggle carry on
+        f |= FLAG_C  # toggle carry on
     regs.F = f
     return 4
 
@@ -66,9 +66,7 @@ def scf(cpu: "Z80CPU") -> int:
     """SCF - Set Carry Flag (4 T-states)"""
     regs = cpu.regs
     regs.F = (
-        (regs.F & (FLAG_S | FLAG_Z | FLAG_PV))
-        | FLAG_C
-        | (regs.A & (FLAG_F3 | FLAG_F5))
+        (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | FLAG_C | (regs.A & (FLAG_F3 | FLAG_F5))
     )
     return 4
 
@@ -99,6 +97,7 @@ def ei(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     regs.EI_PENDING = True
     regs.EI_JUST_RESOLVED = False
+    cpu._needs_slow_step = True
     return 4
 
 
@@ -107,7 +106,7 @@ def neg(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     a = regs.A
     regs.A = (-a) & 0xFF
-    regs.F = get_sub_flags(0, a)
+    regs.F = SUB_FLAGS[a]
     return 8
 
 

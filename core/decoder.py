@@ -46,11 +46,12 @@ class InstructionDecoder:
     """
 
     MAX_CACHE_SIZE = 65536
+    _EMPTY_CACHE = [None] * 65536
 
     def __init__(self):
         self.cache: list = [None] * 65536
-        self._dd_fallback = self._build_dd_fallback_table()
-        self._fd_fallback = self._build_fd_fallback_table()
+        self._dd_fallback = self._build_fallback_table("DD")
+        self._fd_fallback = self._build_fallback_table("FD")
 
     @staticmethod
     def _make_dd_fd_fallback(handler, length):
@@ -65,7 +66,8 @@ class InstructionDecoder:
 
         return fallback
 
-    def _build_dd_fallback_table(self):
+    def _build_fallback_table(self, prefix: str):
+        """Build DD or FD fallback table (merged from duplicate methods)."""
         table = [None] * 256
         for opcode in range(256):
             entry = get_base_opcode(opcode)
@@ -75,21 +77,7 @@ class InstructionDecoder:
                     self._make_dd_fd_fallback(handler, length),
                     cycles + 4,
                     length + 1,
-                    f"(DD) {mnemonic}",
-                )
-        return table
-
-    def _build_fd_fallback_table(self):
-        table = [None] * 256
-        for opcode in range(256):
-            entry = get_base_opcode(opcode)
-            if entry:
-                handler, cycles, length, mnemonic = entry
-                table[opcode] = (
-                    self._make_dd_fd_fallback(handler, length),
-                    cycles + 4,
-                    length + 1,
-                    f"(FD) {mnemonic}",
+                    f"({prefix}) {mnemonic}",
                 )
         return table
 
@@ -131,7 +119,7 @@ class InstructionDecoder:
                 entry = get_ddcb_opcode(cb_op)
                 if entry:
                     handler, cycles, _, mnemonic = entry
-                    return MicroOp(lambda cpu, h=handler: h(cpu), cycles, 4, mnemonic)
+                    return MicroOp(handler, cycles, 4, mnemonic)  # direct — no lambda wrapper
                 return MicroOp(nop, 23, 4, "NOP* (DDCB)")
             entry = get_dd_opcode(dd_op)
             if entry:
@@ -155,7 +143,7 @@ class InstructionDecoder:
                 entry = get_fdcb_opcode(cb_op)
                 if entry:
                     handler, cycles, _, mnemonic = entry
-                    return MicroOp(lambda cpu, h=handler: h(cpu), cycles, 4, mnemonic)
+                    return MicroOp(handler, cycles, 4, mnemonic)  # direct — no lambda wrapper
                 return MicroOp(nop, 23, 4, "NOP* (FDCB)")
             entry = get_fd_opcode(fd_op)
             if entry:
@@ -196,7 +184,7 @@ class InstructionDecoder:
         on the next fetch.  For bank switches use invalidate_range().
         """
         if addr is None:
-            self.cache[:] = [None] * 65536
+            self.cache[:] = self._EMPTY_CACHE
         else:
             # An instruction starting up to 3 bytes before *addr* could
             # span the written location, so flush the surrounding window.
@@ -225,7 +213,7 @@ class InstructionDecoder:
 
         if range_size >= 65536:
             # Whole address space — fastest path
-            self.cache[:] = [None] * 65536
+            self.cache[:] = self._EMPTY_CACHE
         else:
             self.cache[flush_start:flush_end] = [None] * range_size
 
