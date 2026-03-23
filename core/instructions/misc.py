@@ -24,7 +24,7 @@ from ..flags import (
     FLAG_F3,
     FLAG_F5,
     get_daa_result,
-    SUB_FLAGS,  # precomputed table for NEG instruction
+    get_sub_flags,
 )
 
 
@@ -106,7 +106,7 @@ def neg(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     a = regs.A
     regs.A = (-a) & 0xFF
-    regs.F = SUB_FLAGS[a]
+    regs.F = get_sub_flags(0, a)
     return 8
 
 

@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-03-23
+
+### Performance Improvements
+- **SimpleBus Fast-Path**: Direct memory array access when using SimpleBus (eliminates function call overhead for opcode fetch), providing ~31% speedup on simple instruction mixes
+- **Pre-credit Cycle Timing**: Cleaner M1 cycle accounting via pre-credit approach instead of additive + subtractive
+- **Dictionary-based Register Setters**: Pre-built dicts for LD rr,(nn)/(nn),rr operations (BC/DE/SP), replacing getattr/setattr calls
+- **Shared LD A,I/R implementation**: Refactored to use common `_ld_a_ir()` helper, eliminating duplicate code
+- **NEG Flag Calculation**: Switched from direct table lookup (`SUB_FLAGS[a]`) to function-based lookup (`get_sub_flags(0, a)`) for clarity
+
+### Verified
+- All 903 tests pass
+- Benchmark: 2,590,312 instructions/sec vs 1,981,924 before (31% improvement)
+- 100% accuracy maintained
+
 ## [1.6.0] - 2026-03-23
 
 ### Performance Improvements

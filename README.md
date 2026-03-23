@@ -115,6 +115,8 @@ pytest tests/test_validate_z80.py::TestTiming -v
 
 ## Performance Notes
 
+- **SimpleBus Fast-Path**: Direct memory array access when using SimpleBus (eliminates function call overhead)
+- **Pre-credit Cycle Timing**: Cleaner M1 cycle accounting via pre-credit approach
 - **Precomputed ALU Flags**: 320KB lookup tables for ADD/SUB/CP/INC/DEC operations (~2-5x faster than function calls)
 - **Register Dispatch Tables**: O(1) register access via function tables
 - **MicroOp `__slots__`**: Eliminates per-instruction allocation overhead

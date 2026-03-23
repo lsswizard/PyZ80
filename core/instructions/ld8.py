@@ -23,7 +23,7 @@ def _read_addr_from_pc(cpu: "Z80CPU", offset: int = 1) -> int:
     regs = cpu.regs
     pc = regs.PC
     cycles = cpu.cycles
-    low  = cpu._bus_read((pc + offset)     & 0xFFFF, cycles + 1)
+    low = cpu._bus_read((pc + offset) & 0xFFFF, cycles + 1)
     high = cpu._bus_read((pc + offset + 1) & 0xFFFF, cycles + 4)
     cpu.cycles += 7
     return low | (high << 8)
@@ -110,7 +110,7 @@ def ld_bc_a(cpu: "Z80CPU") -> int:
     """LD (BC),A - Store A to address BC (7 T-states)"""
     regs = cpu.regs
     bc = regs.BC
-    a  = regs.A
+    a = regs.A
     cpu._bus_write(bc, a, cpu.cycles)
     regs.Memptr = ((a << 8) | ((bc + 1) & 0xFF)) & 0xFFFF
     return 7
@@ -120,7 +120,7 @@ def ld_de_a(cpu: "Z80CPU") -> int:
     """LD (DE),A - Store A to address DE (7 T-states)"""
     regs = cpu.regs
     de = regs.DE
-    a  = regs.A
+    a = regs.A
     cpu._bus_write(de, a, cpu.cycles)
     regs.Memptr = ((a << 8) | ((de + 1) & 0xFF)) & 0xFFFF
     return 7
@@ -137,10 +137,10 @@ def ld_nn_a(cpu: "Z80CPU") -> int:
     return 13
 
 
-def ld_a_i(cpu: "Z80CPU") -> int:
-    """LD A,I - Load I register to A (9 T-states)"""
+def _ld_a_ir(cpu: "Z80CPU", reg_value: int) -> int:
+    """Shared implementation for LD A,I and LD A,R (9 T-states)."""
     regs = cpu.regs
-    a = regs.I
+    a = reg_value
     regs.A = a
     f = regs.F & FLAG_C
     f |= a & (FLAG_S | FLAG_F3 | FLAG_F5)
@@ -150,21 +150,16 @@ def ld_a_i(cpu: "Z80CPU") -> int:
         f |= FLAG_PV
     regs.F = f
     return 9
+
+
+def ld_a_i(cpu: "Z80CPU") -> int:
+    """LD A,I - Load I register to A (9 T-states)"""
+    return _ld_a_ir(cpu, cpu.regs.I)
 
 
 def ld_a_r(cpu: "Z80CPU") -> int:
     """LD A,R - Load R register to A (9 T-states)"""
-    regs = cpu.regs
-    a = regs.R
-    regs.A = a
-    f = regs.F & FLAG_C
-    f |= a & (FLAG_S | FLAG_F3 | FLAG_F5)
-    if a == 0:
-        f |= FLAG_Z
-    if regs.IFF2:
-        f |= FLAG_PV
-    regs.F = f
-    return 9
+    return _ld_a_ir(cpu, cpu.regs.R)
 
 
 def ld_i_a(cpu: "Z80CPU") -> int:

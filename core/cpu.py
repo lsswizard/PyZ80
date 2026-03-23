@@ -21,12 +21,11 @@ from .flags import FLAG_PV, COND_TABLE
 from .registers import Registers
 from .bus import Z80Bus, SimpleBus
 
-# Bytearray allows O(1) index lookup AND direct arithmetic use in R-increment
 _IS_PREFIXED = bytearray(256)
 for _op in (0xCB, 0xDD, 0xFD, 0xED):
     _IS_PREFIXED[_op] = 1
 
-_REG_BASES = (0, 1, 2, 3, 4, 5)  # B=0, C=1, D=2, E=3, H=4, L=5
+_REG_BASES = (0, 1, 2, 3, 4, 5)
 
 
 def _make_get_reg_table():
@@ -77,13 +76,6 @@ _get_reg_table = _make_get_reg_table()
 _set_reg_table = _make_set_reg_table()
 
 
-# ---------------------------------------------------------------------------
-# Full 8-entry register dispatch tables (reg indices 0-7 = B,C,D,E,H,L,(HL),A)
-# Eliminates the if-chain in get_reg8/set_reg8; every case is one table lookup.
-# (HL) access is handled by the _gM/_sM entries, which do the bus read/write.
-# ---------------------------------------------------------------------------
-
-
 def _gB(cpu, r):
     return r.B
 
@@ -109,7 +101,7 @@ def _gL(cpu, r):
 
 
 def _gM(cpu, r):
-    return cpu._bus_read(r.HL, cpu.cycles)  # (HL)
+    return cpu._bus_read(r.HL, cpu.cycles)
 
 
 def _gA(cpu, r):
@@ -144,7 +136,7 @@ def _sL(cpu, r, v):
 
 
 def _sM(cpu, r, v):
-    cpu._bus_write(r.HL, v, cpu.cycles)  # (HL)
+    cpu._bus_write(r.HL, v, cpu.cycles)
 
 
 def _sA(cpu, r, v):
@@ -175,7 +167,6 @@ class Z80CPU:
         self.bus = bus or SimpleBus()
         self.decoder = InstructionDecoder()
 
-        # Cache frequently used attributes locally for performance
         self._bus_read = self.bus.bus_read
         self._bus_write = self._internal_write
         self._bus_io_read = self.bus.bus_io_read
@@ -183,10 +174,10 @@ class Z80CPU:
         self._decode = self.decoder.decode
         self._cache_list = self.decoder.cache
 
-        # Optimized memory view for decoder (if bus provides one)
         self._mem = getattr(self.bus, "memory", None)
         if self._mem is None:
             self._mem = self.bus
+        self._is_simple_bus = isinstance(self.bus, SimpleBus)
 
         self.halted = False
         self.cycles = 0
@@ -201,7 +192,6 @@ class Z80CPU:
         self._pc_modified = False
         self._is_ld_a_ir = False
 
-        # Tracing
         self._trace_enabled = False
         self._trace_file = None
 
@@ -333,7 +323,7 @@ class Z80CPU:
         regs.IFF1 = False
         regs.IFF2 = False
         self._push_pc_and_get_cycles()
-        self._needs_slow_step = False  # Resume fast path after interrupt
+        self._needs_slow_step = False
 
         if regs.IM == 0:
             opcode = self.interrupt_data
@@ -350,8 +340,6 @@ class Z80CPU:
             self.cycles += 13
             return 13
         else:
-            # IM 2: 7(push) + 2(wait) + 2(read low) + 2(read high) = 19 T-states
-            # Vector low read at T10, high read at T13
             cycles = self.cycles
             vector = (regs.I << 8) | (self.interrupt_data & 0xFE)
             low = self._bus_read(vector, cycles + 10)
@@ -360,40 +348,6 @@ class Z80CPU:
             self._pc_modified = True
             self.cycles += 19
             return 19
-
-    def _dispatch(self, opcode: int, pc: int) -> int:
-        """Execute one instruction and return total T-states."""
-        regs = self.regs
-        cache = self._cache_list
-        mem = self._mem
-
-        op = cache[pc] or self._decode(mem, pc)
-
-        if self._trace_enabled:
-            self._write_trace(pc, opcode, op)
-
-        self._pc_modified = False
-        is_prefixed = _IS_PREFIXED[opcode]  # 0 or 1; used arithmetically below
-        # Inline R increment: +1 for normal ops, +2 for prefixed (no ternary)
-        r = regs.R
-        regs.R = (r & 0x80) | ((r + 1 + is_prefixed) & 0x7F)
-
-        op_cycles = op.handler(self)
-
-        if not self._pc_modified:
-            regs.PC = (pc + op.length) & 0xFFFF
-
-        self.cycles += op_cycles
-        self.instruction_count += 1
-
-        # Per-instruction bookkeeping:
-        # _is_ld_a_ir tracks if last instruction was LD A,I or LD A,R
-        # UnresolvedPrefix tracks if last instruction was a single-byte prefixed op
-        self._is_ld_a_ir = opcode == 0xED and op.mnemonic in ("LD A,I", "LD A,R")
-        if self.interrupt_pending:
-            regs.UnresolvedPrefix = op.length == 1 and is_prefixed
-
-        return op_cycles
 
     def step(self) -> int:
         """Execute one instruction."""
@@ -405,28 +359,53 @@ class Z80CPU:
         pc = regs.PC
         cycles = self.cycles
 
-        # Fetch first byte (at current T-state)
-        opcode = self._bus_read(pc, cycles)
-
-        # Advance T-state by M1 duration (4 cycles)
-        self.cycles = cycles + 4
-
-        # Fast path: check flag first (single attribute access)
+        # --- Interrupt / HALT fast check (mirrors original step logic) ---
         if not self._needs_slow_step:
             if self.halted:
                 r = regs.R
                 regs.R = (r & 0x80) | ((r + 1) & 0x7F)
                 return 4
         else:
-            # Interrupt or EI deferral — handle via slow path
-            self.cycles -= 4
+            self.cycles = cycles  # Must undo pre-credit before interrupt check
             result = self._step_interrupt()
             if result:
+                self.cycles = cycles + result
                 return result
-            # No interrupt serviced (e.g. EI deferral), fall through to dispatch
 
-        op_cycles = self._dispatch(opcode, pc)
-        self.cycles -= 4
+        # --- Opcode fetch: _mem_fast for SimpleBus, bus_read otherwise ---
+        if self._is_simple_bus:
+            opcode = self._mem[pc]
+        else:
+            opcode = self._bus_read(pc, cycles)
+
+        self.cycles = cycles + 4  # Pre-credit M1 T4
+
+        # --- Decode (cache hit is the common case) ---
+        cache = self._cache_list
+        op = cache[pc] or self._decode(self._mem, pc)
+
+        if self._trace_enabled:
+            self._write_trace(pc, opcode, op)
+
+        # --- R register refresh ---
+        self._pc_modified = False
+        is_prefixed = _IS_PREFIXED[opcode]
+        r = regs.R
+        regs.R = (r & 0x80) | ((r + 1 + is_prefixed) & 0x7F)
+
+        # --- Execute instruction ---
+        op_cycles = op.handler(self)
+
+        if not self._pc_modified:
+            regs.PC = (pc + op.length) & 0xFFFF
+
+        self.cycles = cycles + op_cycles  # Undo pre-credit, add full instruction cycles
+        self.instruction_count += 1
+
+        self._is_ld_a_ir = opcode == 0xED and op.mnemonic in ("LD A,I", "LD A,R")
+        if self.interrupt_pending:
+            regs.UnresolvedPrefix = op.length == 1 and is_prefixed
+
         return op_cycles
 
     def _step_interrupt(self) -> int:
@@ -443,7 +422,6 @@ class Z80CPU:
             if self._is_ld_a_ir:
                 regs.F &= ~FLAG_PV
             return cycles
-        # Recompute slow-path flag after EI deferral handling
         self._needs_slow_step = (
             self.interrupt_pending
             or self.nmi_pending
@@ -466,11 +444,11 @@ class Z80CPU:
         return self.cycles - start_cycles
 
     def get_reg8(self, reg: int) -> int:
-        """Get 8-bit register by index (0-7).  Single table lookup, no if-chain."""
+        """Get 8-bit register by index (0-7). Single table lookup, no if-chain."""
         return _GET_REG8[reg](self, self.regs)
 
     def set_reg8(self, reg: int, value: int) -> None:
-        """Set 8-bit register by index.  Single table lookup, no if-chain."""
+        """Set 8-bit register by index. Single table lookup, no if-chain."""
         _SET_REG8[reg](self, self.regs, value & 0xFF)
 
     def get_state(self) -> CPUState:
