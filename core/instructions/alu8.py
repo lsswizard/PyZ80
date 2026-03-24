@@ -21,17 +21,17 @@ from ..flags import (
     FLAG_S,
     FLAG_Z,
     # Precomputed tables — single bytearray index per ALU op (2-5x vs function calls)
-    _ADD_PAIR,      # (ADD_FLAGS, ADC_FLAGS); indexed by carry (0 or 1)
-    _SUB_PAIR,      # (SUB_FLAGS, SBC_FLAGS); indexed by carry (0 or 1)
-    ADD_FLAGS,      # 65536-entry bytearray: add_flags[(a<<8)|b]
+    _ADD_PAIR,  # (ADD_FLAGS, ADC_FLAGS); indexed by carry (0 or 1)
+    _SUB_PAIR,  # (SUB_FLAGS, SBC_FLAGS); indexed by carry (0 or 1)
+    ADD_FLAGS,  # 65536-entry bytearray: add_flags[(a<<8)|b]
     ADC_FLAGS,
     SUB_FLAGS,
     SBC_FLAGS,
-    CP_FLAGS,       # F3/F5 from operand b, not result
-    INC_FLAGS,      # 256-entry: inc_flags[old_value]
+    CP_FLAGS,  # F3/F5 from operand b, not result
+    INC_FLAGS,  # 256-entry: inc_flags[old_value]
     DEC_FLAGS_TBL,  # 256-entry: dec_flags[old_value]
-    SZHZP_TABLE,    # AND flags (H always set)
-    SZ53P_TABLE,    # OR/XOR flags
+    SZHZP_TABLE,  # AND flags (H always set)
+    SZ53P_TABLE,  # OR/XOR flags
 )
 from .ld8 import _get_indexed_addr
 
@@ -304,15 +304,6 @@ def dec_hl(cpu: "Z80CPU") -> int:
     cpu.cycles += 11
     cpu.regs.F = (cpu.regs.F & FLAG_C) | DEC_FLAGS_TBL[value]
     return 11
-
-
-def dec_r(cpu: "Z80CPU", dest: int) -> int:
-    """DEC r - Decrement register (4 T-states)"""
-    value = cpu.get_reg8(dest)
-    new_value = (value - 1) & 0xFF
-    cpu.set_reg8(dest, new_value)
-    cpu.regs.F = (cpu.regs.F & FLAG_C) | DEC_FLAGS_TBL[value]
-    return 4
 
 
 def add_a_ixh(cpu: "Z80CPU", is_iy: bool = False) -> int:

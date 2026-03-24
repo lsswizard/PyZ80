@@ -364,6 +364,7 @@ class Z80CPU:
             if self.halted:
                 r = regs.R
                 regs.R = (r & 0x80) | ((r + 1) & 0x7F)
+                self.cycles = cycles + 4
                 return 4
         else:
             self.cycles = cycles  # Must undo pre-credit before interrupt check
@@ -429,12 +430,6 @@ class Z80CPU:
             or regs.EI_JUST_RESOLVED
         )
         return 0
-
-    def _increment_r(self, amount: int) -> None:
-        """Increment the 7-bit portion of R."""
-        regs = self.regs
-        r = (regs.R + amount) & 0x7F
-        regs.R = (regs.R & 0x80) | r
 
     def execute(self, target_cycles: int) -> int:
         """Execute until target cycles reached."""

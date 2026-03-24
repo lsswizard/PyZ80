@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.1] - 2026-03-24
+
+### Bug Fixes
+- **HALT cycle timing**: Fixed infinite loop in benchmark caused by missing cycle update in pre-credit timing path
+- **Removed dead code**: Removed unused `_increment_r()` method from cpu.py
+- **Removed duplicate code**: Removed duplicate `dec_r()` function in alu8.py
+
 ## [1.7.0] - 2026-03-23
 
 ### Performance Improvements
