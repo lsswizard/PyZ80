@@ -144,88 +144,123 @@ def _build_alu_flag_tables():
     existing SZ53P_TABLE / SZHZP_TABLE lookups.
     """
     _F53 = FLAG_F3 | FLAG_F5
-    add = bytearray(65536); adc = bytearray(65536)
-    sub = bytearray(65536); sbc = bytearray(65536); cp  = bytearray(65536)
-    inc = bytearray(256);   dec = bytearray(256)
+    add = bytearray(65536)
+    adc = bytearray(65536)
+    sub = bytearray(65536)
+    sbc = bytearray(65536)
+    cp = bytearray(65536)
+    inc = bytearray(256)
+    dec = bytearray(256)
 
     for a in range(256):
         a8 = a << 8
 
         # INC: PV set only when old value is 0x7F (positive max → negative)
         nv = (a + 1) & 0xFF
-        f  = nv & (FLAG_S | _F53)
-        if nv == 0:             f |= FLAG_Z
-        if (a & 0x0F) == 0x0F: f |= FLAG_H
-        if a == 0x7F:           f |= FLAG_PV   # overflow, not parity
+        f = nv & (FLAG_S | _F53)
+        if nv == 0:
+            f |= FLAG_Z
+        if (a & 0x0F) == 0x0F:
+            f |= FLAG_H
+        if a == 0x7F:
+            f |= FLAG_PV  # overflow, not parity
         inc[a] = f
 
         # DEC: PV set only when old value is 0x80 (negative min → positive)
         nv = (a - 1) & 0xFF
-        f  = FLAG_N | (nv & (FLAG_S | _F53))
-        if nv == 0:             f |= FLAG_Z
-        if (a & 0x0F) == 0x00:  f |= FLAG_H
-        if a == 0x80:           f |= FLAG_PV   # overflow
+        f = FLAG_N | (nv & (FLAG_S | _F53))
+        if nv == 0:
+            f |= FLAG_Z
+        if (a & 0x0F) == 0x00:
+            f |= FLAG_H
+        if a == 0x80:
+            f |= FLAG_PV  # overflow
         dec[a] = f
 
         for b in range(256):
             idx = a8 | b
 
             # ADD (carry=0): PV when both operands same sign but result differs
-            r = a + b;     r8 = r & 0xFF
+            r = a + b
+            r8 = r & 0xFF
             f = r8 & (FLAG_S | _F53)
-            if r8 == 0:                          f |= FLAG_Z
-            if ((a & 0x0F) + (b & 0x0F)) & 0x10: f |= FLAG_H
-            if r > 0xFF:                         f |= FLAG_C
-            if ((a ^ b) & 0x80) == 0 and ((r8 ^ a) & 0x80) != 0: f |= FLAG_PV
+            if r8 == 0:
+                f |= FLAG_Z
+            if ((a & 0x0F) + (b & 0x0F)) & 0x10:
+                f |= FLAG_H
+            if r > 0xFF:
+                f |= FLAG_C
+            if ((a ^ b) & 0x80) == 0 and ((r8 ^ a) & 0x80) != 0:
+                f |= FLAG_PV
             add[idx] = f
 
             # ADC (carry=1)
-            r = a + b + 1; r8 = r & 0xFF
+            r = a + b + 1
+            r8 = r & 0xFF
             f = r8 & (FLAG_S | _F53)
-            if r8 == 0:                              f |= FLAG_Z
-            if ((a & 0x0F) + (b & 0x0F) + 1) & 0x10: f |= FLAG_H
-            if r > 0xFF:                             f |= FLAG_C
-            if ((a ^ b) & 0x80) == 0 and ((r8 ^ a) & 0x80) != 0: f |= FLAG_PV
+            if r8 == 0:
+                f |= FLAG_Z
+            if ((a & 0x0F) + (b & 0x0F) + 1) & 0x10:
+                f |= FLAG_H
+            if r > 0xFF:
+                f |= FLAG_C
+            if ((a ^ b) & 0x80) == 0 and ((r8 ^ a) & 0x80) != 0:
+                f |= FLAG_PV
             adc[idx] = f
 
             # SUB (carry=0): PV when operands differ in sign and result differs from a
-            r = a - b;     r8 = r & 0xFF
+            r = a - b
+            r8 = r & 0xFF
             f = FLAG_N | (r8 & (FLAG_S | _F53))
-            if r8 == 0:               f |= FLAG_Z
-            if (a & 0x0F) < (b & 0x0F): f |= FLAG_H
-            if r < 0:                 f |= FLAG_C
-            if ((a ^ b) & 0x80) != 0 and ((r8 ^ a) & 0x80) != 0: f |= FLAG_PV
+            if r8 == 0:
+                f |= FLAG_Z
+            if (a & 0x0F) < (b & 0x0F):
+                f |= FLAG_H
+            if r < 0:
+                f |= FLAG_C
+            if ((a ^ b) & 0x80) != 0 and ((r8 ^ a) & 0x80) != 0:
+                f |= FLAG_PV
             sub[idx] = f
 
             # SBC (carry=1)
-            r = a - b - 1; r8 = r & 0xFF
+            r = a - b - 1
+            r8 = r & 0xFF
             f = FLAG_N | (r8 & (FLAG_S | _F53))
-            if r8 == 0:                   f |= FLAG_Z
-            if (a & 0x0F) < ((b & 0x0F) + 1): f |= FLAG_H
-            if r < 0:                     f |= FLAG_C
-            if ((a ^ b) & 0x80) != 0 and ((r8 ^ a) & 0x80) != 0: f |= FLAG_PV
+            if r8 == 0:
+                f |= FLAG_Z
+            if (a & 0x0F) < ((b & 0x0F) + 1):
+                f |= FLAG_H
+            if r < 0:
+                f |= FLAG_C
+            if ((a ^ b) & 0x80) != 0 and ((r8 ^ a) & 0x80) != 0:
+                f |= FLAG_PV
             sbc[idx] = f
 
             # CP: F3/F5 from operand b (not the subtraction result)
             r8 = (a - b) & 0xFF
-            f  = FLAG_N | (b & _F53)
-            if r8 & 0x80:               f |= FLAG_S
-            if r8 == 0:                 f |= FLAG_Z
-            if (a & 0x0F) < (b & 0x0F): f |= FLAG_H
-            if a < b:                   f |= FLAG_C
-            if ((a ^ b) & 0x80) != 0 and ((r8 ^ a) & 0x80) != 0: f |= FLAG_PV
+            f = FLAG_N | (b & _F53)
+            if r8 & 0x80:
+                f |= FLAG_S
+            if r8 == 0:
+                f |= FLAG_Z
+            if (a & 0x0F) < (b & 0x0F):
+                f |= FLAG_H
+            if a < b:
+                f |= FLAG_C
+            if ((a ^ b) & 0x80) != 0 and ((r8 ^ a) & 0x80) != 0:
+                f |= FLAG_PV
             cp[idx] = f
 
     return add, adc, sub, sbc, cp, inc, dec
 
 
-(ADD_FLAGS, ADC_FLAGS, SUB_FLAGS, SBC_FLAGS,
- CP_FLAGS, INC_FLAGS, DEC_FLAGS_TBL) = _build_alu_flag_tables()
+(ADD_FLAGS, ADC_FLAGS, SUB_FLAGS, SBC_FLAGS, CP_FLAGS, INC_FLAGS, DEC_FLAGS_TBL) = (
+    _build_alu_flag_tables()
+)
 
 # Pair tables for carry-indexed dispatch (FLAG_C == 1, so carry is 0 or 1)
-_ADD_PAIR = (ADD_FLAGS, ADC_FLAGS)   # _ADD_PAIR[carry][(a<<8)|b]
-_SUB_PAIR = (SUB_FLAGS, SBC_FLAGS)   # _SUB_PAIR[carry][(a<<8)|b]
-
+_ADD_PAIR = (ADD_FLAGS, ADC_FLAGS)  # _ADD_PAIR[carry][(a<<8)|b]
+_SUB_PAIR = (SUB_FLAGS, SBC_FLAGS)  # _SUB_PAIR[carry][(a<<8)|b]
 
 
 # ===========================================================================
@@ -750,7 +785,8 @@ COND_TABLE = _build_cond_table()
 # ===========================================================================
 # DAA — Decimal Adjust Accumulator lookup table
 # DAA_TABLE[index] = (corrected_A, c_flag, h_flag)
-# index = (N << 7) | (H << 6) | (C << 5) | A  = 2048 entries
+# index = (N << 10) | (H << 9) | (C << 8) | A  = 2048 entries
+# Sequential correction: low nibble first, then high nibble on corrected value
 # ===========================================================================
 
 
@@ -762,28 +798,23 @@ def _build_daa_table():
                 base_idx = (n << 10) | (h << 9) | (c << 8)
                 for orig_a in range(256):
                     a = orig_a
-                    lo_correction = False
                     new_c = c
                     new_h = 0
 
                     if not n:  # after addition
                         if h or (a & 0x0F) > 9:
                             a = (a + 0x06) & 0xFF
-                            lo_correction = True
+                            new_h = 1
                         if c or a > 0x9F:  # Check AFTER low nibble correction
                             a = (a + 0x60) & 0xFF
                             new_c = 1
-                        if lo_correction:
-                            new_h = 1
                     else:  # after subtraction
                         if h:
-                            lo_correction = True
                             a = (a - 0x06) & 0xFF
+                            new_h = 1
                         if c:
                             a = (a - 0x60) & 0xFF
                             new_c = 1
-                        if lo_correction and (a & 0x0F) >= 6:
-                            new_h = 1
 
                     table[base_idx | orig_a] = (a, new_c, new_h)
     return table

@@ -32,6 +32,7 @@ def daa(cpu: "Z80CPU") -> int:
     """DAA - Decimal Adjust Accumulator (4 T-states)"""
     regs = cpu.regs
     regs.A, regs.F = get_daa_result(regs.A, regs.F)
+    regs.Q = regs.F
     return 4
 
 
@@ -45,29 +46,40 @@ def cpl(cpu: "Z80CPU") -> int:
         | FLAG_N
         | (regs.A & (FLAG_F3 | FLAG_F5))
     )
+    regs.Q = regs.F
     return 4
 
 
 def ccf(cpu: "Z80CPU") -> int:
     """CCF - Complement Carry Flag (4 T-states)"""
     regs = cpu.regs
-    old_c = regs.F & FLAG_C
-    # Preserve S, Z, PV; undocumented F3/F5 come from A
-    f = (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | (regs.A & (FLAG_F3 | FLAG_F5))
+    old_f = regs.F  # Save BEFORE modifying
+    old_c = old_f & FLAG_C
+    # CCF: C=!C, N=0, H=oldC, S/Z/PV preserved, F3/F5 from (last_Q^F)|A
+    f = old_f & (FLAG_S | FLAG_Z | FLAG_PV)
+    # Q factor: F3/F5 = ((last_Q ^ F) | A)[3/5] - use OLD flags
+    result = (regs.last_Q ^ old_f) | regs.A
+    f |= result & (FLAG_F3 | FLAG_F5)
     if old_c:
-        f |= FLAG_H  # old carry becomes H
+        f |= FLAG_H  # old carry becomes H, new C is 0
     else:
-        f |= FLAG_C  # toggle carry on
+        f |= FLAG_C  # new C is 1, H stays 0
     regs.F = f
+    regs.Q = f
     return 4
 
 
 def scf(cpu: "Z80CPU") -> int:
     """SCF - Set Carry Flag (4 T-states)"""
     regs = cpu.regs
-    regs.F = (
-        (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | FLAG_C | (regs.A & (FLAG_F3 | FLAG_F5))
-    )
+    old_f = regs.F  # Save BEFORE modifying
+    # SCF: C=1, N=0, H=0, S/Z/PV preserved, F3/F5 from (last_Q^F)|A
+    f = (old_f & (FLAG_S | FLAG_Z | FLAG_PV)) | FLAG_C
+    # Q factor: F3/F5 = ((last_Q ^ F) | A)[3/5] - use OLD flags
+    result = (regs.last_Q ^ old_f) | regs.A
+    f |= result & (FLAG_F3 | FLAG_F5)
+    regs.F = f
+    regs.Q = f
     return 4
 
 

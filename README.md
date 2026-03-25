@@ -6,6 +6,8 @@ A high-performance, cycle-exact Z80 CPU emulator written in Python with Numba JI
 
 - **Cycle-Exact Timing**: Accurate T-state tracking between M-cycles
 - **Complete Instruction Set**: All 256 base opcodes + CB/ED/DD/FD prefixes
+- **Undocumented Instructions**: Full support for undocumented Z80 opcodes and flags
+- **Q Factor Tracking**: Patrik Rak's SCF/CCF flag discovery implemented for Zilog Z80 accuracy
 - **Cycle-Accurate Interrupts**: NMI and maskable interrupt handling
 - **Pre-decoded Cache**: Optimized instruction execution with 64KB decode cache
 - **Numba JIT Acceleration**: Flag calculations compiled to native code
@@ -101,7 +103,7 @@ return_pc = cpu.ret()
 
 ## Testing
 
-Run the validation suite:
+Run the validation suite (916 tests):
 
 ```bash
 pytest tests/

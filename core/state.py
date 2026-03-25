@@ -61,6 +61,10 @@ class CPUState:
     # Memory pointer (used by several flag-affecting instructions)
     Memptr: int = 0
 
+    # Q factor tracking (Patrik Rak discovery for SCF/CCF undocumented behavior)
+    Q: int = 0
+    last_Q: int = 0
+
     # CPU execution status
     halted: bool = False
     cycles: int = 0
@@ -103,6 +107,8 @@ class CPUState:
             "EI_PENDING": self.EI_PENDING,
             "EI_JUST_RESOLVED": self.EI_JUST_RESOLVED,
             "Memptr": self.Memptr,
+            "Q": self.Q,
+            "last_Q": self.last_Q,
             "halted": self.halted,
             "cycles": self.cycles,
             "instruction_count": self.instruction_count,

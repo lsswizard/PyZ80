@@ -51,7 +51,11 @@ def ldi(cpu: "Z80CPU") -> int:
 
 
 def ldir(cpu: "Z80CPU") -> int:
-    """LDIR - Load, increment, repeat (16/21 T-states)"""
+    """LDIR - Load, increment, repeat (16/21 T-states)
+    When BC=0 before execution, acts as a 2-byte NOP (16 T-states)."""
+    if cpu.regs.BC == 0:
+        cpu.cycles += 16
+        return 16
     ldi(cpu)
     if cpu.regs.BC != 0:
         cpu._pc_modified = True
@@ -74,7 +78,11 @@ def ldd(cpu: "Z80CPU") -> int:
 
 
 def lddr(cpu: "Z80CPU") -> int:
-    """LDDR - Load, decrement, repeat (16/21 T-states)"""
+    """LDDR - Load, decrement, repeat (16/21 T-states)
+    When BC=0 before execution, acts as a 2-byte NOP (16 T-states)."""
+    if cpu.regs.BC == 0:
+        cpu.cycles += 16
+        return 16
     ldd(cpu)
     if cpu.regs.BC != 0:
         cpu._pc_modified = True
@@ -186,17 +194,23 @@ def cpdr(cpu: "Z80CPU") -> int:
     return 16
 
 
-def _compute_in_out_flags(regs, old_b: int, new_b: int) -> None:
-    """Compute flags for INI/IND/OUTI/OUTD instructions."""
-    regs.F = FLAG_N | (regs.F & FLAG_C)
+def _compute_in_out_flags(regs, value: int, old_b: int, new_b: int) -> None:
+    """Compute flags for INI/IND/OUTI/OUTD instructions.
+    N flag = bit 7 of the transferred value."""
+    f = FLAG_C if regs.F & FLAG_C else 0
+    if value & 0x80:
+        f |= FLAG_N
     if new_b & 0x80:
-        regs.F |= FLAG_S
+        f |= FLAG_S
     if new_b == 0:
-        regs.F |= FLAG_Z
+        f |= FLAG_Z
     if (old_b & 0x0F) == 0:
-        regs.F |= FLAG_H
+        f |= FLAG_H
+    # PV = parity of (new_b & 0x07) XOR (value & 0x02)/2 ??? No.
+    # Simplified: PV = 1 if old_b == 0x80 (wrapping to 0xFF)
     if old_b == 0x80:
-        regs.F |= FLAG_PV
+        f |= FLAG_PV
+    regs.F = f
 
 
 def ini(cpu: "Z80CPU") -> int:
@@ -209,12 +223,16 @@ def ini(cpu: "Z80CPU") -> int:
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
     regs.HL = (regs.HL + 1) & 0xFFFF
-    _compute_in_out_flags(regs, old_b, regs.B)
+    _compute_in_out_flags(regs, value, old_b, regs.B)
     return 16
 
 
 def inir(cpu: "Z80CPU") -> int:
-    """INIR - Input, increment, repeat (16/21 T-states)"""
+    """INIR - Input, increment, repeat (16/21 T-states)
+    When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
+    if cpu.regs.B == 0:
+        cpu.cycles += 16
+        return 16
     old_b = cpu.regs.B
     ini(cpu)
     if old_b != 1:
@@ -233,12 +251,16 @@ def ind(cpu: "Z80CPU") -> int:
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
     regs.HL = (regs.HL - 1) & 0xFFFF
-    _compute_in_out_flags(regs, old_b, regs.B)
+    _compute_in_out_flags(regs, value, old_b, regs.B)
     return 16
 
 
 def indr(cpu: "Z80CPU") -> int:
-    """INDR - Input, decrement, repeat (16/21 T-states)"""
+    """INDR - Input, decrement, repeat (16/21 T-states)
+    When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
+    if cpu.regs.B == 0:
+        cpu.cycles += 16
+        return 16
     old_b = cpu.regs.B
     ind(cpu)
     if old_b != 1:
@@ -257,12 +279,16 @@ def outi(cpu: "Z80CPU") -> int:
     cpu._bus_io_write(regs.BC, value, cycles + 4)
     cpu.cycles += 16
     regs.HL = (regs.HL + 1) & 0xFFFF
-    _compute_in_out_flags(regs, old_b, regs.B)
+    _compute_in_out_flags(regs, value, old_b, regs.B)
     return 16
 
 
 def otir(cpu: "Z80CPU") -> int:
-    """OTIR - Output, increment, repeat (16/21 T-states)"""
+    """OTIR - Output, increment, repeat (16/21 T-states)
+    When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
+    if cpu.regs.B == 0:
+        cpu.cycles += 16
+        return 16
     old_b = cpu.regs.B
     outi(cpu)
     if old_b != 1:
@@ -281,12 +307,16 @@ def outd(cpu: "Z80CPU") -> int:
     cpu._bus_io_write(regs.BC, value, cycles + 4)
     cpu.cycles += 16
     regs.HL = (regs.HL - 1) & 0xFFFF
-    _compute_in_out_flags(regs, old_b, regs.B)
+    _compute_in_out_flags(regs, value, old_b, regs.B)
     return 16
 
 
 def otdr(cpu: "Z80CPU") -> int:
-    """OTDR - Output, decrement, repeat (16/21 T-states)"""
+    """OTDR - Output, decrement, repeat (16/21 T-states)
+    When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
+    if cpu.regs.B == 0:
+        cpu.cycles += 16
+        return 16
     old_b = cpu.regs.B
     outd(cpu)
     if old_b != 1:

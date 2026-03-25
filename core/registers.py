@@ -54,6 +54,8 @@ class Registers:
         "EI_JUST_RESOLVED",
         "UnresolvedPrefix",
         "Memptr",
+        "Q",
+        "last_Q",
     )
 
     def __init__(self):
@@ -159,6 +161,8 @@ class Registers:
         self.EI_JUST_RESOLVED = False
         self.UnresolvedPrefix = False
         self.Memptr = 0
+        self.Q = 0
+        self.last_Q = 0
 
     def get_state(self) -> Dict[str, Any]:
         return {
@@ -214,11 +218,14 @@ class Registers:
         # Benchmarked ~28% faster than the lambda/setattr approach.
         v = value & 0xFFFF
         if pair == 0:
-            self.B = v >> 8; self.C = v & 0xFF
+            self.B = v >> 8
+            self.C = v & 0xFF
         elif pair == 1:
-            self.D = v >> 8; self.E = v & 0xFF
+            self.D = v >> 8
+            self.E = v & 0xFF
         elif pair == 2:
-            self.H = v >> 8; self.L = v & 0xFF
+            self.H = v >> 8
+            self.L = v & 0xFF
         else:
             self.SP = v
 
@@ -236,10 +243,14 @@ class Registers:
         # Inline to avoid lambda + setattr + property lookup chain.
         v = value & 0xFFFF
         if pair == 0:
-            self.B = v >> 8; self.C = v & 0xFF
+            self.B = v >> 8
+            self.C = v & 0xFF
         elif pair == 1:
-            self.D = v >> 8; self.E = v & 0xFF
+            self.D = v >> 8
+            self.E = v & 0xFF
         elif pair == 2:
-            self.H = v >> 8; self.L = v & 0xFF
+            self.H = v >> 8
+            self.L = v & 0xFF
         else:
-            self.A = v >> 8; self.F = v & 0xFF
+            self.A = v >> 8
+            self.F = v & 0xFF

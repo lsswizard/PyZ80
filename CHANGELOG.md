@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-03-25
+
+### Accuracy Improvements
+- **Q Factor Tracking (Patrik Rak discovery)**: Implemented the Z80 internal Q latch for correct SCF/CCF undocumented flag behavior. After flag-modifying instructions, F3/F5 are copied from A. After non-flag-modifying instructions (including EX AF,AF' and POP AF which are exceptions), F3/F5 are ORed with previous flags. Formula: `result = (Q ^ F) | A; F5 = result.5; F3 = result.3`
+- **DAA Table Rewrite**: Corrected sequential nibble correction — low nibble correction applied first, then high nibble check on the corrected value (`a > 0x9F` after low correction, not `orig_a > 0x99`)
+- **Block Repeat BC=0/B=0 Guards**: LDIR, LDDR, INIR, INDR, OTIR, OTDR now correctly act as 2-byte NOPs when the count register is zero (documented Z80 behavior)
+- **IO Flag Computation**: `_compute_in_out_flags` now uses bit 7 of the transferred value for the N flag (was incorrectly hardcoded to N=1)
+
+### Performance Improvements
+- **Stack Write Optimization**: PUSH, POP, EX (SP),HL, EX (SP),IX now use `_bus_write_direct` to skip decoder cache invalidation for stack operations (assumes stack area is not self-modifying code)
+- **Cache Write Optimization**: Writes that don't change memory value skip decoder cache invalidation
+- **Removed Redundant Cycle Pre-credit**: Eliminated duplicate `self.cycles = cycles + 4` in step() method
+
+### State Management
+- **Q/last_Q in CPUState**: Added Q factor fields to state snapshots for proper save/restore
+- **Q/last_Q in Registers**: Added Q and last_Q to register file
+
+### Testing (903 → 916 tests)
+- **Q Factor SCF Tests**: 4 tests covering copy-from-A, clear, OR behavior, and POP AF exception
+- **Q Factor CCF Tests**: 4 tests covering copy-from-A, clear, OR behavior, and EX AF exception
+- **Q Factor Sequence Tests**: 5 tests covering SCF;SCF, NOP;SCF, DEC;SCF, POP AF;SCF, EX AF;SCF
+- **test_flags.py Fix**: Fixed AttributeError accessing non-existent `cpu.regs.Z` attribute
+
+### Verified
+- All 916 tests pass
+- All instruction timings verified correct (4-23 T-states)
+- Q factor behavior matches Patrik Rak's Zilog Z80 test suite
+
 ## [1.7.1] - 2026-03-24
 
 ### Bug Fixes

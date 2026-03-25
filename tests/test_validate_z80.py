@@ -4152,3 +4152,206 @@ class TestRSTComprehensive:
         cpu.step()
         assert cpu.bus.bus_read(0xFFFE, cpu.cycles) == 0x00
         assert cpu.bus.bus_read(0xFFFD, cpu.cycles) == 0x03
+
+
+# ============================================================
+# Q Factor Tracking — Patrik Rak discovery for SCF/CCF
+#
+# The Z80 has an internal Q latch that holds the new F value
+# after flag-modifying instructions, or 0 after non-flag-modifying
+# instructions (including EX AF,AF' and POP AF).
+#
+# For SCF and CCF, YF (bit 5) and XF (bit 3) are computed as:
+#   result = (Q ^ F) | A
+#   YF = result.5, XF = result.3
+#
+# When Q == F (previous instruction modified flags):
+#   result = (F ^ F) | A = 0 | A = A
+#   So YF = A.5, XF = A.3  (copy from A)
+#
+# When Q == 0 (previous instruction did NOT modify flags):
+#   result = (0 ^ F) | A = F | A
+#   So YF = F.5 | A.5, XF = F.3 | A.3  (OR with previous flags)
+#
+# Reference: https://worldofspectrum.org/forums/discussion/41704
+# ============================================================
+
+FLAG_F3 = 0x08
+FLAG_F5 = 0x20
+
+
+class TestQFactorSCF:
+    """Q factor tracking for SCF instruction (Patrik Rak discovery)."""
+
+    def test_scf_after_flag_modifying_copies_a(self, cpu):
+        """SCF after flag-modifying instruction: F3/F5 copied from A."""
+        # DEC A modifies flags, so Q = F after DEC
+        # A=0x10 -> DEC A -> A=0x0F (0000 1111): A.5=0, A.3=1
+        cpu.regs.A = 0x10
+        write_program(cpu, [0x3D, 0x37])  # DEC A; SCF
+        cpu.step()  # DEC A modifies flags -> Q = F, A=0x0F
+        cpu.step()  # SCF: since Q==F, F3/F5 = A.3/A.5
+        assert not (cpu.regs.F & FLAG_F5)  # F5 = A.5 = 0
+        assert cpu.regs.F & FLAG_F3  # F3 = A.3 = 1
+        assert cpu.regs.F & FLAG_C  # SCF sets carry
+
+    def test_scf_after_flag_modifying_copies_a_clear(self, cpu):
+        """SCF after flag-modifying instruction: F3/F5 copied from A (clear)."""
+        # A=0x20 -> DEC A -> A=0x1F (0001 1111): A.5=0, A.3=1
+        # Use 0x30 -> DEC A -> A=0x2F (0010 1111): A.5=1, A.3=1
+        # Use 0x18 -> DEC A -> A=0x17 (0001 0111): A.5=0, A.3=1
+        # Use 0x10 -> DEC A -> A=0x0F (0000 1111): A.5=0, A.3=1
+        # Need A.5=0, A.3=0 after DEC -> A=0x08 -> DEC -> A=0x07 (0000 0111)
+        cpu.regs.A = 0x08
+        write_program(cpu, [0x3D, 0x37])  # DEC A; SCF
+        cpu.step()  # DEC A: A=0x07, modifies flags -> Q = F
+        cpu.step()  # SCF: since Q==F, F3/F5 = A.3/A.5
+        assert not (cpu.regs.F & FLAG_F5)  # F5 = A.5 = 0
+        assert not (cpu.regs.F & FLAG_F3)  # F3 = A.3 = 0
+        assert cpu.regs.F & FLAG_C
+
+    def test_scf_after_non_flag_modifying_ors_with_a(self, cpu):
+        """SCF after non-flag-modifying instruction: F3/F5 = F|A (OR)."""
+        # EX AF,AF' does NOT modify flags -> Q = 0
+        cpu.regs.A = 0x28  # A.5=1, A.3=1
+        cpu.regs.F = 0x04  # F.5=0, F.3=0 (only PV set)
+        write_program(cpu, [0x08, 0x37])  # EX AF,AF'; SCF
+        cpu.step()  # EX AF,AF' doesn't modify flags -> Q = 0
+        # After EX, A and F are swapped. But the point is Q=0
+        saved_a = cpu.regs.A
+        saved_f = cpu.regs.F
+        cpu.step()  # SCF: Q=0, so F3/F5 = (0^F)|A = F|A
+        # F3 = saved_f.3 | saved_a.3, F5 = saved_f.5 | saved_a.5
+        expected_f5 = bool(saved_f & FLAG_F5) or bool(saved_a & FLAG_F5)
+        expected_f3 = bool(saved_f & FLAG_F3) or bool(saved_a & FLAG_F3)
+        assert bool(cpu.regs.F & FLAG_F5) == expected_f5
+        assert bool(cpu.regs.F & FLAG_F3) == expected_f3
+
+    def test_scf_after_pop_af_ors(self, cpu):
+        """SCF after POP AF: Q=0, so F3/F5 = F|A (OR behavior)."""
+        cpu.regs.SP = 0x4000
+        # Push value with F5=0, F3=0 onto stack
+        cpu.bus.bus_write(0x4000, 0x00, 0)  # F byte (no flags)
+        cpu.bus.bus_write(0x4001, 0x00, 0)  # A byte
+        cpu.regs.A = 0x28  # A.5=1, A.3=1
+        write_program(cpu, [0xF1, 0x37])  # POP AF; SCF
+        cpu.step()  # POP AF -> Q = 0 (exception!)
+        cpu.step()  # SCF with Q=0
+        # Since Q=0, F3/F5 = F|A. After POP AF, F=0x00, A=0x00
+        # So F3=0|0=0, F5=0|0=0
+        assert not (cpu.regs.F & FLAG_F5)
+        assert not (cpu.regs.F & FLAG_F3)
+
+
+class TestQFactorCCF:
+    """Q factor tracking for CCF instruction (Patrik Rak discovery)."""
+
+    def test_ccf_after_flag_modifying_copies_a(self, cpu):
+        """CCF after flag-modifying instruction: F3/F5 copied from A."""
+        # DEC A modifies flags, so Q = F after DEC
+        # A=0x30 -> DEC A -> A=0x2F (0010 1111): A.5=1, A.3=1
+        cpu.regs.A = 0x30
+        cpu.regs.F = 0x01  # C=1
+        write_program(cpu, [0x3D, 0x3F])  # DEC A; CCF
+        cpu.step()  # DEC A modifies flags -> Q = F, A=0x2F
+        cpu.step()  # CCF: since Q==F, F3/F5 = A.3/A.5
+        assert cpu.regs.F & FLAG_F5  # F5 = A.5 = 1
+        assert cpu.regs.F & FLAG_F3  # F3 = A.3 = 1
+        assert not (cpu.regs.F & FLAG_C)  # CCF toggles carry
+
+    def test_ccf_after_flag_modifying_copies_a_clear(self, cpu):
+        """CCF after flag-modifying instruction: F3/F5 copied from A (clear)."""
+        # A=0x08 -> DEC A -> A=0x07 (0000 0111): A.5=0, A.3=0
+        cpu.regs.A = 0x08
+        cpu.regs.F = 0x00  # C=0
+        write_program(cpu, [0x3D, 0x3F])  # DEC A; CCF
+        cpu.step()  # DEC A modifies flags -> Q = F, A=0x07
+        cpu.step()  # CCF: since Q==F, F3/F5 = A.3/A.5
+        assert not (cpu.regs.F & FLAG_F5)  # F5 = A.5 = 0
+        assert not (cpu.regs.F & FLAG_F3)  # F3 = A.3 = 0
+        assert cpu.regs.F & FLAG_C  # CCF toggles carry on
+
+    def test_ccf_after_non_flag_modifying_ors_with_a(self, cpu):
+        """CCF after non-flag-modifying instruction: F3/F5 = F|A (OR)."""
+        # NOP does NOT modify flags -> Q = 0
+        cpu.regs.A = 0x00  # A.5=0, A.3=0
+        cpu.regs.F = 0x28  # F.5=1, F.3=1
+        write_program(cpu, [0x00, 0x3F])  # NOP; CCF
+        cpu.step()  # NOP doesn't modify flags -> Q = 0
+        cpu.step()  # CCF: Q=0, so F3/F5 = (0^F)|A = F|A
+        # F.5|A.5 = 1|0 = 1, F.3|A.3 = 1|0 = 1
+        assert cpu.regs.F & FLAG_F5
+        assert cpu.regs.F & FLAG_F3
+
+    def test_ccf_after_ex_af_ors(self, cpu):
+        """CCF after EX AF,AF': Q=0, so F3/F5 = F|A (OR behavior)."""
+        cpu.regs.A = 0x28  # A.5=1, A.3=1
+        cpu.regs.F = 0x04  # F.5=0, F.3=0
+        write_program(cpu, [0x08, 0x3F])  # EX AF,AF'; CCF
+        cpu.step()  # EX AF,AF' -> Q = 0
+        saved_a = cpu.regs.A
+        saved_f = cpu.regs.F
+        cpu.step()  # CCF with Q=0
+        expected_f5 = bool(saved_f & FLAG_F5) or bool(saved_a & FLAG_F5)
+        expected_f3 = bool(saved_f & FLAG_F3) or bool(saved_a & FLAG_F3)
+        assert bool(cpu.regs.F & FLAG_F5) == expected_f5
+        assert bool(cpu.regs.F & FLAG_F3) == expected_f3
+
+
+class TestQFactorSequence:
+    """Q factor tracking across instruction sequences."""
+
+    def test_scf_scf_second_copies_a(self, cpu):
+        """SCF; SCF — second SCF sees Q=F from first SCF, copies A."""
+        cpu.regs.A = 0x28  # A.5=1, A.3=1
+        write_program(cpu, [0x37, 0x37])  # SCF; SCF
+        cpu.step()  # First SCF modifies flags -> Q = F
+        cpu.step()  # Second SCF: Q=F, so F3/F5 = A.3/A.5
+        assert cpu.regs.F & FLAG_F5
+        assert cpu.regs.F & FLAG_F3
+        assert cpu.regs.F & FLAG_C
+
+    def test_nop_scf_ors(self, cpu):
+        """NOP; SCF — SCF sees Q=0 from NOP, ORs with A."""
+        cpu.regs.A = 0x00  # A.5=0, A.3=0
+        cpu.regs.F = 0x28  # F.5=1, F.3=1
+        write_program(cpu, [0x00, 0x37])  # NOP; SCF
+        cpu.step()  # NOP -> Q = 0
+        cpu.step()  # SCF: Q=0, so F3/F5 = F|A = 1|0 = 1
+        assert cpu.regs.F & FLAG_F5
+        assert cpu.regs.F & FLAG_F3
+
+    def test_dec_a_scf_copies(self, cpu):
+        """DEC A; SCF — SCF copies F3/F5 from A."""
+        cpu.regs.A = 0x10  # A.5=0, A.3=0 (but will become 0x0F after DEC)
+        write_program(cpu, [0x3D, 0x37])  # DEC A; SCF
+        cpu.step()  # DEC A: A=0x0F, modifies flags -> Q=F
+        assert cpu.regs.A == 0x0F  # A.5=0, A.3=1
+        cpu.step()  # SCF: Q=F, so F3/F5 = A.3/A.5 = 1/0
+        assert cpu.regs.F & FLAG_F3  # A.3 = 1
+        assert not (cpu.regs.F & FLAG_F5)  # A.5 = 0
+
+    def test_pop_af_scf_q_zero(self, cpu):
+        """POP AF; SCF — POP AF sets Q=0, SCF ORs F3/F5."""
+        cpu.regs.SP = 0x4000
+        cpu.bus.bus_write(0x4000, 0xFF, 0)  # F with all flags set
+        cpu.bus.bus_write(0x4001, 0xFF, 0)  # A = 0xFF
+        write_program(cpu, [0xF1, 0x37])  # POP AF; SCF
+        cpu.step()  # POP AF -> Q = 0 (exception!)
+        cpu.step()  # SCF: Q=0, so F3/F5 = F|A
+        # F=0xFF, A=0xFF, so F|A = 0xFF, F3=1, F5=1
+        assert cpu.regs.F & FLAG_F5
+        assert cpu.regs.F & FLAG_F3
+
+    def test_ex_af_af_scf_q_zero(self, cpu):
+        """EX AF,AF'; SCF — EX AF,AF' sets Q=0, SCF ORs F3/F5."""
+        cpu.regs.A = 0x00
+        cpu.regs.F = 0x28  # F5=1, F3=1
+        cpu.regs.Ap = 0xFF
+        cpu.regs.Fp = 0x00
+        write_program(cpu, [0x08, 0x37])  # EX AF,AF'; SCF
+        cpu.step()  # EX AF,AF' -> Q = 0
+        # After EX: A=0xFF, F=0x00
+        cpu.step()  # SCF: Q=0, F3/F5 = F|A = 0|0xFF = 1
+        assert cpu.regs.F & FLAG_F5
+        assert cpu.regs.F & FLAG_F3

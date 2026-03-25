@@ -25,6 +25,11 @@ _IS_PREFIXED = bytearray(256)
 for _op in (0xCB, 0xDD, 0xFD, 0xED):
     _IS_PREFIXED[_op] = 1
 
+# Opcodes that modify F but should NOT set Q (FUSE convention)
+_IS_Q_EXCEPT = bytearray(256)
+for _op in (0x08, 0xF1):  # EX AF,AF' and POP AF
+    _IS_Q_EXCEPT[_op] = 1
+
 _REG_BASES = (0, 1, 2, 3, 4, 5)
 
 
@@ -168,7 +173,8 @@ class Z80CPU:
         self.decoder = InstructionDecoder()
 
         self._bus_read = self.bus.bus_read
-        self._bus_write = self._internal_write
+        self._bus_write_direct = self.bus.bus_write
+        self._bus_write = self._cache_write
         self._bus_io_read = self.bus.bus_io_read
         self._bus_io_write = self.bus.bus_io_write
         self._decode = self.decoder.decode
@@ -220,8 +226,7 @@ class Z80CPU:
 
     def write_byte(self, addr: int, value: int) -> None:
         """Write byte to memory via bus, and invalidate decoder cache."""
-        self._bus_write(addr, value, self.cycles)
-        self.decoder.invalidate_cache(addr)
+        self._cache_write(addr, value, self.cycles)
 
     def io_read(self, port: int) -> int:
         """Read from I/O port via bus."""
@@ -239,16 +244,14 @@ class Z80CPU:
 
     def write16_at(self, addr: int, value: int, base_t: int) -> None:
         """Write 16-bit value to memory at explicit T-states."""
-        self._bus_write(addr, value & 0xFF, base_t)
-        self._bus_write((addr + 1) & 0xFFFF, value >> 8, base_t + 1)
-        self.decoder.invalidate_cache(addr)
-        self.decoder.invalidate_cache((addr + 1) & 0xFFFF)
+        self._cache_write(addr, value & 0xFF, base_t)
+        self._cache_write((addr + 1) & 0xFFFF, value >> 8, base_t + 1)
 
     def push16_at(self, value: int, base_t: int) -> int:
         """Push 16-bit value at explicit T-states. Returns new SP."""
         sp = (self.regs.SP - 2) & 0xFFFF
-        self._bus_write(sp, value & 0xFF, base_t)
-        self._bus_write((sp + 1) & 0xFFFF, value >> 8, base_t + 1)
+        self._bus_write_direct(sp, value & 0xFF, base_t)
+        self._bus_write_direct((sp + 1) & 0xFFFF, value >> 8, base_t + 1)
         self.regs.SP = sp
         return sp
 
@@ -260,10 +263,20 @@ class Z80CPU:
         self.regs.SP = (sp + 2) & 0xFFFF
         return hi << 8 | lo
 
-    def _internal_write(self, addr: int, value: int, cycles: int) -> None:
-        """Internal write wrapper that ensures the decoder cache is always invalidated."""
-        self.bus.bus_write(addr, value, cycles)
-        self.decoder.invalidate_cache(addr)
+    def _cache_write(self, addr: int, value: int, cycles: int) -> None:
+        """Internal write wrapper that ensures the decoder cache is updated only on change."""
+        # Performance: skip invalidation if the value is the same (common for data/stack)
+        addr &= 0xFFFF
+        if self._mem[addr] != value:
+            self._bus_write_direct(addr, value, cycles)
+            # Invalidate cache for this address and surrounding window
+            cache = self._cache_list
+            cache[addr] = None
+            for i in range(1, 4):
+                cache[(addr - i) & 0xFFFF] = None
+        else:
+            # Still need to call bus_write for contention/hardware effects
+            self._bus_write_direct(addr, value, cycles)
 
     # -------------------------------------------------------------------------
     # Execution
@@ -301,8 +314,9 @@ class Z80CPU:
         cycles = self.cycles
         sp = (regs.SP - 2) & 0xFFFF
         pc = regs.PC
-        self._bus_write(sp, pc & 0xFF, cycles + 1)
-        self._bus_write((sp + 1) & 0xFFFF, pc >> 8, cycles + 4)
+        # Direct call to avoid double invalidation check (stack is rarely code)
+        self._bus_write_direct(sp, pc & 0xFF, cycles + 1)
+        self._bus_write_direct((sp + 1) & 0xFFFF, pc >> 8, cycles + 4)
         regs.SP = sp
 
     def _handle_nmi(self) -> int:
@@ -350,28 +364,27 @@ class Z80CPU:
             return 19
 
     def step(self) -> int:
-        """Execute one instruction."""
+        """Execute one instruction with optimized attribute access."""
         if self.bus_request:
             self.cycles += 1
             return 1
 
         regs = self.regs
-        pc = regs.PC
         cycles = self.cycles
 
-        # --- Interrupt / HALT fast check (mirrors original step logic) ---
-        if not self._needs_slow_step:
-            if self.halted:
-                r = regs.R
-                regs.R = (r & 0x80) | ((r + 1) & 0x7F)
-                self.cycles = cycles + 4
-                return 4
-        else:
-            self.cycles = cycles  # Must undo pre-credit before interrupt check
+        # --- Interrupt / HALT fast check ---
+        if self._needs_slow_step:
             result = self._step_interrupt()
             if result:
-                self.cycles = cycles + result
+                # _step_interrupt already updated self.cycles via handle_interrupt
                 return result
+        elif self.halted:
+            r = regs.R
+            regs.R = (r & 0x80) | ((r + 1) & 0x7F)
+            self.cycles = cycles + 4
+            return 4
+
+        pc = regs.PC
 
         # --- Opcode fetch: _mem_fast for SimpleBus, bus_read otherwise ---
         if self._is_simple_bus:
@@ -379,33 +392,43 @@ class Z80CPU:
         else:
             opcode = self._bus_read(pc, cycles)
 
-        self.cycles = cycles + 4  # Pre-credit M1 T4
-
         # --- Decode (cache hit is the common case) ---
-        cache = self._cache_list
-        op = cache[pc] or self._decode(self._mem, pc)
+        # Accessing self._cache_list directly avoids method call overhead
+        op = self._cache_list[pc] or self._decode(self._mem, pc)
 
         if self._trace_enabled:
             self._write_trace(pc, opcode, op)
 
         # --- R register refresh ---
         self._pc_modified = False
-        is_prefixed = _IS_PREFIXED[opcode]
         r = regs.R
-        regs.R = (r & 0x80) | ((r + 1 + is_prefixed) & 0x7F)
+        regs.R = (r & 0x80) | ((r + 1 + _IS_PREFIXED[opcode]) & 0x7F)
+
+        # --- Q factor tracking for SCF/CCF (Patrik Rak discovery) ---
+        regs.last_Q = regs.Q
+        regs.Q = 0  # Preemptive clear
+        old_f = regs.F
 
         # --- Execute instruction ---
+        self.cycles = cycles + 4  # Pre-credit M1 T4
         op_cycles = op.handler(self)
+
+        # Set Q = F if this instruction modified flags
+        # (EX AF,AF' and POP AF are exceptions that don't set Q)
+        if regs.F != old_f and not _IS_Q_EXCEPT[opcode]:
+            regs.Q = regs.F
 
         if not self._pc_modified:
             regs.PC = (pc + op.length) & 0xFFFF
 
-        self.cycles = cycles + op_cycles  # Undo pre-credit, add full instruction cycles
+        # Final cycles update
+        total_cycles = cycles + op_cycles
+        self.cycles = total_cycles
         self.instruction_count += 1
 
         self._is_ld_a_ir = opcode == 0xED and op.mnemonic in ("LD A,I", "LD A,R")
         if self.interrupt_pending:
-            regs.UnresolvedPrefix = op.length == 1 and is_prefixed
+            regs.UnresolvedPrefix = op.length == 1 and _IS_PREFIXED[opcode]
 
         return op_cycles
 

@@ -21,8 +21,8 @@ def _push_word(cpu: "Z80CPU", value: int) -> int:
     """Push 16-bit value to stack. Returns new SP."""
     cycles = cpu.cycles
     sp = (cpu.regs.SP - 2) & 0xFFFF
-    cpu._bus_write(sp, value & 0xFF, cycles + 1)
-    cpu._bus_write((sp + 1) & 0xFFFF, (value >> 8) & 0xFF, cycles + 4)
+    cpu._bus_write_direct(sp, value & 0xFF, cycles + 1)
+    cpu._bus_write_direct((sp + 1) & 0xFFFF, (value >> 8) & 0xFF, cycles + 4)
     cpu.cycles += 7
     cpu.regs.SP = sp
     return sp
@@ -142,8 +142,8 @@ def ex_sp_hl(cpu: "Z80CPU") -> int:
     low = cpu._bus_read(sp, cycles + 1)
     high = cpu._bus_read((sp + 1) & 0xFFFF, cycles + 4)
     temp = low | (high << 8)
-    cpu._bus_write(sp, regs.L, cycles + 7)
-    cpu._bus_write((sp + 1) & 0xFFFF, regs.H, cycles + 10)
+    cpu._bus_write_direct(sp, regs.L, cycles + 7)
+    cpu._bus_write_direct((sp + 1) & 0xFFFF, regs.H, cycles + 10)
     cpu.cycles += 19
     regs.HL = temp
     return 19
@@ -258,8 +258,8 @@ def ex_sp_ix(cpu: "Z80CPU", is_iy: bool = False) -> int:
     temp = low | (high << 8)
     regs.Memptr = temp
     val = regs.IY if is_iy else regs.IX
-    cpu._bus_write(sp, val & 0xFF, cycles + 7)
-    cpu._bus_write((sp + 1) & 0xFFFF, (val >> 8) & 0xFF, cycles + 10)
+    cpu._bus_write_direct(sp, val & 0xFF, cycles + 7)
+    cpu._bus_write_direct((sp + 1) & 0xFFFF, (val >> 8) & 0xFF, cycles + 10)
     cpu.cycles += 23
     if is_iy:
         regs.IY = temp
