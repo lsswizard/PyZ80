@@ -37,40 +37,77 @@ from .ld8 import _get_indexed_addr
 
 
 def add_a_r(cpu: "Z80CPU", src: int) -> int:
-    """ADD A,r - Add register to A (4 T-states)"""
-    b = cpu.get_reg8(src)
-    a = cpu.regs.A
-    cpu.regs.A = (a + b) & 0xFF
-    cpu.regs.F = ADD_FLAGS[(a << 8) | b]
+    """ADD A,r - Add register to A (4 T-states)
+
+    Register encoding: 0=B, 1=C, 2=D, 3=E, 4=H, 5=L, 6=(HL), 7=A
+    """
+    regs = cpu.regs
+    a = regs.A
+
+    if src == 7:
+        b = regs.A
+    elif src == 0:
+        b = regs.B
+    elif src == 1:
+        b = regs.C
+    elif src == 2:
+        b = regs.D
+    elif src == 3:
+        b = regs.E
+    elif src == 4:
+        b = regs.H
+    elif src == 5:
+        b = regs.L
+    else:  # src == 6: (HL)
+        b = cpu._bus_read(regs.HL, cpu.cycles)
+
+    regs.A = (a + b) & 0xFF
+    regs.F = ADD_FLAGS[(a << 8) | b]
     return 4
 
 
 def add_a_n(cpu: "Z80CPU") -> int:
     """ADD A,n - Add immediate to A (7 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
-    a = cpu.regs.A
-    cpu.regs.A = (a + b) & 0xFF
-    cpu.regs.F = ADD_FLAGS[(a << 8) | b]
+    regs = cpu.regs
+    b = cpu._bus_read((regs.PC + 1) & 0xFFFF, cpu.cycles)
+    a = regs.A
+    regs.A = (a + b) & 0xFF
+    regs.F = ADD_FLAGS[(a << 8) | b]
     return 7
 
 
 def add_a_hl(cpu: "Z80CPU") -> int:
     """ADD A,(HL) - Add memory to A (7 T-states)"""
-    cycles = cpu.cycles
-    b = cpu._bus_read(cpu.regs.HL, cycles)
-    a = cpu.regs.A
-    cpu.regs.A = (a + b) & 0xFF
-    cpu.regs.F = ADD_FLAGS[(a << 8) | b]
+    regs = cpu.regs
+    b = cpu._bus_read(regs.HL, cpu.cycles)
+    a = regs.A
+    regs.A = (a + b) & 0xFF
+    regs.F = ADD_FLAGS[(a << 8) | b]
     return 7
 
 
 def adc_a_r(cpu: "Z80CPU", src: int) -> int:
     """ADC A,r - Add register with carry to A (4 T-states)"""
-    b = cpu.get_reg8(src)
     regs = cpu.regs
     a = regs.A
+
+    if src == 7:
+        b = regs.A
+    elif src == 0:
+        b = regs.B
+    elif src == 1:
+        b = regs.C
+    elif src == 2:
+        b = regs.D
+    elif src == 3:
+        b = regs.E
+    elif src == 4:
+        b = regs.H
+    elif src == 5:
+        b = regs.L
+    else:  # src == 6: (HL)
+        b = cpu._bus_read(regs.HL, cpu.cycles)
+
     c = regs.F & FLAG_C
     regs.A = (a + b + c) & 0xFF
     regs.F = _ADD_PAIR[c][(a << 8) | b]
@@ -79,10 +116,8 @@ def adc_a_r(cpu: "Z80CPU", src: int) -> int:
 
 def adc_a_n(cpu: "Z80CPU") -> int:
     """ADC A,n - Add immediate with carry to A (7 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
     regs = cpu.regs
+    b = cpu._bus_read((regs.PC + 1) & 0xFFFF, cpu.cycles)
     a = regs.A
     c = regs.F & FLAG_C
     regs.A = (a + b + c) & 0xFF
@@ -92,9 +127,8 @@ def adc_a_n(cpu: "Z80CPU") -> int:
 
 def adc_a_hl(cpu: "Z80CPU") -> int:
     """ADC A,(HL) - Add memory with carry to A (7 T-states)"""
-    cycles = cpu.cycles
-    b = cpu._bus_read(cpu.regs.HL, cycles)
     regs = cpu.regs
+    b = cpu._bus_read(regs.HL, cpu.cycles)
     a = regs.A
     c = regs.F & FLAG_C
     regs.A = (a + b + c) & 0xFF
@@ -104,39 +138,73 @@ def adc_a_hl(cpu: "Z80CPU") -> int:
 
 def sub_r(cpu: "Z80CPU", src: int) -> int:
     """SUB r - Subtract register from A (4 T-states)"""
-    b = cpu.get_reg8(src)
-    a = cpu.regs.A
-    cpu.regs.A = (a - b) & 0xFF
-    cpu.regs.F = SUB_FLAGS[(a << 8) | b]
+    regs = cpu.regs
+    a = regs.A
+
+    if src == 7:
+        b = regs.A
+    elif src == 0:
+        b = regs.B
+    elif src == 1:
+        b = regs.C
+    elif src == 2:
+        b = regs.D
+    elif src == 3:
+        b = regs.E
+    elif src == 4:
+        b = regs.H
+    elif src == 5:
+        b = regs.L
+    else:  # src == 6: (HL)
+        b = cpu._bus_read(regs.HL, cpu.cycles)
+
+    regs.A = (a - b) & 0xFF
+    regs.F = SUB_FLAGS[(a << 8) | b]
     return 4
 
 
 def sub_n(cpu: "Z80CPU") -> int:
     """SUB n - Subtract immediate from A (7 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
-    a = cpu.regs.A
-    cpu.regs.A = (a - b) & 0xFF
-    cpu.regs.F = SUB_FLAGS[(a << 8) | b]
+    regs = cpu.regs
+    b = cpu._bus_read((regs.PC + 1) & 0xFFFF, cpu.cycles)
+    a = regs.A
+    regs.A = (a - b) & 0xFF
+    regs.F = SUB_FLAGS[(a << 8) | b]
     return 7
 
 
 def sub_hl(cpu: "Z80CPU") -> int:
     """SUB (HL) - Subtract memory from A (7 T-states)"""
-    cycles = cpu.cycles
-    b = cpu._bus_read(cpu.regs.HL, cycles)
-    a = cpu.regs.A
-    cpu.regs.A = (a - b) & 0xFF
-    cpu.regs.F = SUB_FLAGS[(a << 8) | b]
+    regs = cpu.regs
+    b = cpu._bus_read(regs.HL, cpu.cycles)
+    a = regs.A
+    regs.A = (a - b) & 0xFF
+    regs.F = SUB_FLAGS[(a << 8) | b]
     return 7
 
 
 def sbc_a_r(cpu: "Z80CPU", src: int) -> int:
     """SBC A,r - Subtract register with carry from A (4 T-states)"""
-    b = cpu.get_reg8(src)
     regs = cpu.regs
     a = regs.A
+
+    if src == 7:
+        b = regs.A
+    elif src == 0:
+        b = regs.B
+    elif src == 1:
+        b = regs.C
+    elif src == 2:
+        b = regs.D
+    elif src == 3:
+        b = regs.E
+    elif src == 4:
+        b = regs.H
+    elif src == 5:
+        b = regs.L
+    else:  # src == 6: (HL)
+        b = cpu._bus_read(regs.HL, cpu.cycles)
+
     c = regs.F & FLAG_C
     regs.A = (a - b - c) & 0xFF
     regs.F = _SUB_PAIR[c][(a << 8) | b]
@@ -145,10 +213,8 @@ def sbc_a_r(cpu: "Z80CPU", src: int) -> int:
 
 def sbc_a_n(cpu: "Z80CPU") -> int:
     """SBC A,n - Subtract immediate with carry from A (7 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
     regs = cpu.regs
+    b = cpu._bus_read((regs.PC + 1) & 0xFFFF, cpu.cycles)
     a = regs.A
     c = regs.F & FLAG_C
     regs.A = (a - b - c) & 0xFF
@@ -158,9 +224,8 @@ def sbc_a_n(cpu: "Z80CPU") -> int:
 
 def sbc_a_hl(cpu: "Z80CPU") -> int:
     """SBC A,(HL) - Subtract memory with carry from A (7 T-states)"""
-    cycles = cpu.cycles
-    b = cpu._bus_read(cpu.regs.HL, cycles)
     regs = cpu.regs
+    b = cpu._bus_read(regs.HL, cpu.cycles)
     a = regs.A
     c = regs.F & FLAG_C
     regs.A = (a - b - c) & 0xFF
@@ -170,106 +235,206 @@ def sbc_a_hl(cpu: "Z80CPU") -> int:
 
 def and_r(cpu: "Z80CPU", src: int) -> int:
     """AND r - Logical AND with register (4 T-states)"""
-    cpu.regs.A &= cpu.get_reg8(src)
-    cpu.regs.F = SZHZP_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    if src == 7:
+        b = regs.A
+    elif src == 0:
+        b = regs.B
+    elif src == 1:
+        b = regs.C
+    elif src == 2:
+        b = regs.D
+    elif src == 3:
+        b = regs.E
+    elif src == 4:
+        b = regs.H
+    elif src == 5:
+        b = regs.L
+    else:  # src == 6: (HL)
+        b = cpu._bus_read(regs.HL, cpu.cycles)
+    regs.A &= b
+    regs.F = SZHZP_TABLE[regs.A]
     return 4
 
 
 def and_n(cpu: "Z80CPU") -> int:
     """AND n - Logical AND with immediate (7 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    cpu.regs.A &= cpu._bus_read((pc + 1) & 0xFFFF, cycles)
-    cpu.regs.F = SZHZP_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    regs.A &= cpu._bus_read((regs.PC + 1) & 0xFFFF, cpu.cycles)
+    regs.F = SZHZP_TABLE[regs.A]
     return 7
 
 
 def and_hl(cpu: "Z80CPU") -> int:
     """AND (HL) - Logical AND with memory (7 T-states)"""
-    cycles = cpu.cycles
-    cpu.regs.A &= cpu._bus_read(cpu.regs.HL, cycles)
-    cpu.regs.F = SZHZP_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    regs.A &= cpu._bus_read(regs.HL, cpu.cycles)
+    regs.F = SZHZP_TABLE[regs.A]
     return 7
 
 
 def or_r(cpu: "Z80CPU", src: int) -> int:
     """OR r - Logical OR with register (4 T-states)"""
-    cpu.regs.A |= cpu.get_reg8(src)
-    cpu.regs.F = SZ53P_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    if src == 7:
+        b = regs.A
+    elif src == 0:
+        b = regs.B
+    elif src == 1:
+        b = regs.C
+    elif src == 2:
+        b = regs.D
+    elif src == 3:
+        b = regs.E
+    elif src == 4:
+        b = regs.H
+    elif src == 5:
+        b = regs.L
+    else:  # src == 6: (HL)
+        b = cpu._bus_read(regs.HL, cpu.cycles)
+    regs.A |= b
+    regs.F = SZ53P_TABLE[regs.A]
     return 4
 
 
 def or_n(cpu: "Z80CPU") -> int:
     """OR n - Logical OR with immediate (7 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    cpu.regs.A |= cpu._bus_read((pc + 1) & 0xFFFF, cycles)
-    cpu.regs.F = SZ53P_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    regs.A |= cpu._bus_read((regs.PC + 1) & 0xFFFF, cpu.cycles)
+    regs.F = SZ53P_TABLE[regs.A]
     return 7
 
 
 def or_hl(cpu: "Z80CPU") -> int:
     """OR (HL) - Logical OR with memory (7 T-states)"""
-    cycles = cpu.cycles
-    cpu.regs.A |= cpu._bus_read(cpu.regs.HL, cycles)
-    cpu.regs.F = SZ53P_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    regs.A |= cpu._bus_read(regs.HL, cpu.cycles)
+    regs.F = SZ53P_TABLE[regs.A]
     return 7
 
 
 def xor_r(cpu: "Z80CPU", src: int) -> int:
     """XOR r - Logical XOR with register (4 T-states)"""
-    cpu.regs.A ^= cpu.get_reg8(src)
-    cpu.regs.F = SZ53P_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    if src == 7:
+        b = regs.A
+    elif src == 0:
+        b = regs.B
+    elif src == 1:
+        b = regs.C
+    elif src == 2:
+        b = regs.D
+    elif src == 3:
+        b = regs.E
+    elif src == 4:
+        b = regs.H
+    elif src == 5:
+        b = regs.L
+    else:  # src == 6: (HL)
+        b = cpu._bus_read(regs.HL, cpu.cycles)
+    regs.A ^= b
+    regs.F = SZ53P_TABLE[regs.A]
     return 4
 
 
 def xor_n(cpu: "Z80CPU") -> int:
     """XOR n - Logical XOR with immediate (7 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    cpu.regs.A ^= cpu._bus_read((pc + 1) & 0xFFFF, cycles)
-    cpu.regs.F = SZ53P_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    regs.A ^= cpu._bus_read((regs.PC + 1) & 0xFFFF, cpu.cycles)
+    regs.F = SZ53P_TABLE[regs.A]
     return 7
 
 
 def xor_hl(cpu: "Z80CPU") -> int:
     """XOR (HL) - Logical XOR with memory (7 T-states)"""
-    cycles = cpu.cycles
-    cpu.regs.A ^= cpu._bus_read(cpu.regs.HL, cycles)
-    cpu.regs.F = SZ53P_TABLE[cpu.regs.A]
+    regs = cpu.regs
+    regs.A ^= cpu._bus_read(regs.HL, cpu.cycles)
+    regs.F = SZ53P_TABLE[regs.A]
     return 7
 
 
 def cp_r(cpu: "Z80CPU", src: int) -> int:
     """CP r - Compare register with A (4 T-states)"""
-    b = cpu.get_reg8(src)
-    cpu.regs.F = CP_FLAGS[(cpu.regs.A << 8) | b]
+    regs = cpu.regs
+    if src == 7:
+        b = regs.A
+    elif src == 0:
+        b = regs.B
+    elif src == 1:
+        b = regs.C
+    elif src == 2:
+        b = regs.D
+    elif src == 3:
+        b = regs.E
+    elif src == 4:
+        b = regs.H
+    elif src == 5:
+        b = regs.L
+    else:  # src == 6: (HL)
+        b = cpu._bus_read(regs.HL, cpu.cycles)
+    regs.F = CP_FLAGS[(regs.A << 8) | b]
     return 4
 
 
 def cp_n(cpu: "Z80CPU") -> int:
     """CP n - Compare immediate with A (7 T-states)"""
-    pc = cpu.regs.PC
-    cycles = cpu.cycles
-    b = cpu._bus_read((pc + 1) & 0xFFFF, cycles)
-    cpu.regs.F = CP_FLAGS[(cpu.regs.A << 8) | b]
+    regs = cpu.regs
+    b = cpu._bus_read((regs.PC + 1) & 0xFFFF, cpu.cycles)
+    regs.F = CP_FLAGS[(regs.A << 8) | b]
     return 7
 
 
 def cp_hl(cpu: "Z80CPU") -> int:
     """CP (HL) - Compare memory with A (7 T-states)"""
-    cycles = cpu.cycles
-    b = cpu._bus_read(cpu.regs.HL, cycles)
-    cpu.regs.F = CP_FLAGS[(cpu.regs.A << 8) | b]
+    regs = cpu.regs
+    b = cpu._bus_read(regs.HL, cpu.cycles)
+    regs.F = CP_FLAGS[(regs.A << 8) | b]
     return 7
 
 
 def inc_r(cpu: "Z80CPU", dest: int) -> int:
     """INC r - Increment register (4 T-states)"""
-    value = cpu.get_reg8(dest)
+    regs = cpu.regs
+
+    # Inline read
+    if dest == 7:
+        value = regs.A
+    elif dest == 0:
+        value = regs.B
+    elif dest == 1:
+        value = regs.C
+    elif dest == 2:
+        value = regs.D
+    elif dest == 3:
+        value = regs.E
+    elif dest == 4:
+        value = regs.H
+    elif dest == 5:
+        value = regs.L
+    else:  # dest == 6: (HL)
+        value = cpu._bus_read(regs.HL, cpu.cycles)
+
     new_value = (value + 1) & 0xFF
-    cpu.set_reg8(dest, new_value)
-    cpu.regs.F = (cpu.regs.F & FLAG_C) | INC_FLAGS[value]
+
+    # Inline write
+    if dest == 7:
+        regs.A = new_value
+    elif dest == 0:
+        regs.B = new_value
+    elif dest == 1:
+        regs.C = new_value
+    elif dest == 2:
+        regs.D = new_value
+    elif dest == 3:
+        regs.E = new_value
+    elif dest == 4:
+        regs.H = new_value
+    elif dest == 5:
+        regs.L = new_value
+    else:  # dest == 6: (HL)
+        cpu._bus_write(regs.HL, new_value, cpu.cycles + 3)
+
+    regs.F = (regs.F & FLAG_C) | INC_FLAGS[value]
     return 4
 
 
@@ -287,10 +452,47 @@ def inc_hl(cpu: "Z80CPU") -> int:
 
 def dec_r(cpu: "Z80CPU", dest: int) -> int:
     """DEC r - Decrement register (4 T-states)"""
-    value = cpu.get_reg8(dest)
+    regs = cpu.regs
+
+    # Inline read
+    if dest == 7:
+        value = regs.A
+    elif dest == 0:
+        value = regs.B
+    elif dest == 1:
+        value = regs.C
+    elif dest == 2:
+        value = regs.D
+    elif dest == 3:
+        value = regs.E
+    elif dest == 4:
+        value = regs.H
+    elif dest == 5:
+        value = regs.L
+    else:  # dest == 6: (HL)
+        value = cpu._bus_read(regs.HL, cpu.cycles)
+
     new_value = (value - 1) & 0xFF
-    cpu.set_reg8(dest, new_value)
-    cpu.regs.F = (cpu.regs.F & FLAG_C) | DEC_FLAGS_TBL[value]
+
+    # Inline write
+    if dest == 7:
+        regs.A = new_value
+    elif dest == 0:
+        regs.B = new_value
+    elif dest == 1:
+        regs.C = new_value
+    elif dest == 2:
+        regs.D = new_value
+    elif dest == 3:
+        regs.E = new_value
+    elif dest == 4:
+        regs.H = new_value
+    elif dest == 5:
+        regs.L = new_value
+    else:  # dest == 6: (HL)
+        cpu._bus_write(regs.HL, new_value, cpu.cycles + 3)
+
+    regs.F = (regs.F & FLAG_C) | DEC_FLAGS_TBL[value]
     return 4
 
 

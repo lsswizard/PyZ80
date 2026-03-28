@@ -32,53 +32,8 @@ for _op in (0x08, 0xF1):  # EX AF,AF' and POP AF
 
 _REG_BASES = (0, 1, 2, 3, 4, 5)
 
-
-def _make_get_reg_table():
-    def _get_b(r):
-        return r.B
-
-    def _get_c(r):
-        return r.C
-
-    def _get_d(r):
-        return r.D
-
-    def _get_e(r):
-        return r.E
-
-    def _get_h(r):
-        return r.H
-
-    def _get_l(r):
-        return r.L
-
-    return (_get_b, _get_c, _get_d, _get_e, _get_h, _get_l)
-
-
-def _make_set_reg_table():
-    def _set_b(r, v):
-        r.B = v
-
-    def _set_c(r, v):
-        r.C = v
-
-    def _set_d(r, v):
-        r.D = v
-
-    def _set_e(r, v):
-        r.E = v
-
-    def _set_h(r, v):
-        r.H = v
-
-    def _set_l(r, v):
-        r.L = v
-
-    return (_set_b, _set_c, _set_d, _set_e, _set_h, _set_l)
-
-
-_get_reg_table = _make_get_reg_table()
-_set_reg_table = _make_set_reg_table()
+# Register attribute names for fast inline access (indices 0-5 = B,C,D,E,H,L)
+_REG8_ATTRS = ("B", "C", "D", "E", "H", "L")
 
 
 def _gB(cpu, r):
@@ -165,6 +120,33 @@ class Z80CPU:
         cycles: Total T-states executed since reset
         halted: Whether the CPU is in HALT state
     """
+
+    __slots__ = (
+        "regs",
+        "bus",
+        "decoder",
+        "_bus_read",
+        "_bus_write_direct",
+        "_bus_write",
+        "_bus_io_read",
+        "_bus_io_write",
+        "_decode",
+        "_cache_list",
+        "_mem",
+        "_is_simple_bus",
+        "halted",
+        "cycles",
+        "instruction_count",
+        "interrupt_pending",
+        "interrupt_data",
+        "nmi_pending",
+        "bus_request",
+        "_needs_slow_step",
+        "_pc_modified",
+        "_is_ld_a_ir",
+        "_trace_enabled",
+        "_trace_file",
+    )
 
     def __init__(self, bus: Optional[Z80Bus] = None):
         """Initialize CPU with given bus interface."""
@@ -265,17 +247,15 @@ class Z80CPU:
 
     def _cache_write(self, addr: int, value: int, cycles: int) -> None:
         """Internal write wrapper that ensures the decoder cache is updated only on change."""
-        # Performance: skip invalidation if the value is the same (common for data/stack)
         addr &= 0xFFFF
         if self._mem[addr] != value:
             self._bus_write_direct(addr, value, cycles)
-            # Invalidate cache for this address and surrounding window
             cache = self._cache_list
             cache[addr] = None
-            for i in range(1, 4):
-                cache[(addr - i) & 0xFFFF] = None
+            cache[(addr - 1) & 0xFFFF] = None
+            cache[(addr - 2) & 0xFFFF] = None
+            cache[(addr - 3) & 0xFFFF] = None
         else:
-            # Still need to call bus_write for contention/hardware effects
             self._bus_write_direct(addr, value, cycles)
 
     # -------------------------------------------------------------------------

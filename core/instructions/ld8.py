@@ -45,26 +45,113 @@ def _get_indexed_addr(cpu: "Z80CPU", is_iy: bool, offset_pos: int = 2) -> int:
 
 
 def ld_r_r(cpu: "Z80CPU", dest: int, src: int) -> int:
-    """LD r,r' - Load register to register (4 T-states)"""
-    cpu.set_reg8(dest, cpu.get_reg8(src))
+    """LD r,r' - Load register to register (4 T-states)
+
+    Register encoding: 0=B, 1=C, 2=D, 3=E, 4=H, 5=L, 6=(HL), 7=A
+    """
+    regs = cpu.regs
+
+    # Inline register read (avoid method call overhead)
+    if src == 7:
+        val = regs.A
+    elif src == 0:
+        val = regs.B
+    elif src == 1:
+        val = regs.C
+    elif src == 2:
+        val = regs.D
+    elif src == 3:
+        val = regs.E
+    elif src == 4:
+        val = regs.H
+    elif src == 5:
+        val = regs.L
+    else:  # src == 6: (HL)
+        val = cpu._bus_read(regs.HL, cpu.cycles)
+
+    # Inline register write (avoid method call overhead)
+    if dest == 7:
+        regs.A = val
+    elif dest == 0:
+        regs.B = val
+    elif dest == 1:
+        regs.C = val
+    elif dest == 2:
+        regs.D = val
+    elif dest == 3:
+        regs.E = val
+    elif dest == 4:
+        regs.H = val
+    elif dest == 5:
+        regs.L = val
+    else:  # dest == 6: (HL)
+        cpu._bus_write(regs.HL, val, cpu.cycles)
+
     return 4
 
 
 def ld_r_n(cpu: "Z80CPU", dest: int) -> int:
     """LD r,n - Load immediate to register (7 T-states)"""
-    cpu.set_reg8(dest, cpu._bus_read((cpu.regs.PC + 1) & 0xFFFF, cpu.cycles))
+    val = cpu._bus_read((cpu.regs.PC + 1) & 0xFFFF, cpu.cycles)
+    regs = cpu.regs
+    if dest == 7:
+        regs.A = val
+    elif dest == 0:
+        regs.B = val
+    elif dest == 1:
+        regs.C = val
+    elif dest == 2:
+        regs.D = val
+    elif dest == 3:
+        regs.E = val
+    elif dest == 4:
+        regs.H = val
+    elif dest == 5:
+        regs.L = val
+    else:  # dest == 6: (HL)
+        cpu._bus_write(regs.HL, val, cpu.cycles + 3)
     return 7
 
 
 def ld_r_hl(cpu: "Z80CPU", dest: int) -> int:
     """LD r,(HL) - Load from memory to register (7 T-states)"""
-    cpu.set_reg8(dest, cpu._bus_read(cpu.regs.HL, cpu.cycles))
+    val = cpu._bus_read(cpu.regs.HL, cpu.cycles)
+    regs = cpu.regs
+    if dest == 7:
+        regs.A = val
+    elif dest == 0:
+        regs.B = val
+    elif dest == 1:
+        regs.C = val
+    elif dest == 2:
+        regs.D = val
+    elif dest == 3:
+        regs.E = val
+    elif dest == 4:
+        regs.H = val
+    elif dest == 5:
+        regs.L = val
     return 7
 
 
 def ld_hl_r(cpu: "Z80CPU", src: int) -> int:
     """LD (HL),r - Store register to memory (7 T-states)"""
-    cpu._bus_write(cpu.regs.HL, cpu.get_reg8(src), cpu.cycles)
+    regs = cpu.regs
+    if src == 7:
+        val = regs.A
+    elif src == 0:
+        val = regs.B
+    elif src == 1:
+        val = regs.C
+    elif src == 2:
+        val = regs.D
+    elif src == 3:
+        val = regs.E
+    elif src == 4:
+        val = regs.H
+    else:  # src == 5
+        val = regs.L
+    cpu._bus_write(regs.HL, val, cpu.cycles)
     return 7
 
 
