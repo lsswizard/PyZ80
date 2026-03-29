@@ -18,6 +18,12 @@ if TYPE_CHECKING:
 
 from .ld8 import _read_addr_from_pc
 from .ld16 import _push_word, _pop_word
+from ..flags import COND_TABLE
+
+
+def _cond(cpu, condition):
+    """Inline condition check - avoids method dispatch overhead."""
+    return COND_TABLE[(cpu.regs.F << 3) | (condition & 0x07)]
 
 
 def jp_nn(cpu: "Z80CPU") -> int:
@@ -29,7 +35,7 @@ def jp_nn(cpu: "Z80CPU") -> int:
 
 def jp_cc_nn(cpu: "Z80CPU", condition: int) -> int:
     """JP cc,nn - Conditional jump (10 T-states)"""
-    if cpu.check_condition(condition):
+    if _cond(cpu, condition):
         cpu.regs.PC = _read_addr_from_pc(cpu, 1)
         cpu._pc_modified = True
     return 10
@@ -50,7 +56,7 @@ def jr_e(cpu: "Z80CPU") -> int:
 
 def jr_cc_e(cpu: "Z80CPU", condition: int) -> int:
     """JR cc,e - Conditional relative jump (7/12 T-states)"""
-    if cpu.check_condition(condition):
+    if _cond(cpu, condition):
         regs = cpu.regs
         pc = regs.PC
         offset = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
@@ -99,7 +105,7 @@ def call_nn(cpu: "Z80CPU") -> int:
 
 def call_cc_nn(cpu: "Z80CPU", condition: int) -> int:
     """CALL cc,nn - Conditional call (10/17 T-states)"""
-    if cpu.check_condition(condition):
+    if _cond(cpu, condition):
         return call_nn(cpu)
     return 10
 
@@ -114,7 +120,7 @@ def ret(cpu: "Z80CPU") -> int:
 
 def ret_cc(cpu: "Z80CPU", condition: int) -> int:
     """RET cc - Conditional return (5/11 T-states)"""
-    if cpu.check_condition(condition):
+    if _cond(cpu, condition):
         ret(cpu)
         return 11
     return 5
