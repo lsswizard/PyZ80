@@ -30,11 +30,6 @@ _IS_Q_EXCEPT = bytearray(256)
 for _op in (0x08, 0xF1):  # EX AF,AF' and POP AF
     _IS_Q_EXCEPT[_op] = 1
 
-_REG_BASES = (0, 1, 2, 3, 4, 5)
-
-# Register attribute names for fast inline access (indices 0-5 = B,C,D,E,H,L)
-_REG8_ATTRS = ("B", "C", "D", "E", "H", "L")
-
 
 def _gB(cpu, r):
     return r.B
