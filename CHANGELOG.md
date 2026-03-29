@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1] - 2026-03-29
+
+### Performance Improvements
+- **DAA Pre-computed Flags**: `DAA_FULL_FLAGS` table now stores pre-computed full flag bytes, reducing `get_daa_result` to a single lookup instead of per-call flag reconstruction
+- **Module API Surface**: Added `__all__` to `core/flags.py` for clean public API definition
+
+### Verified
+- All 916 tests pass
+
 ## [1.8.0] - 2026-03-25
 
 ### Accuracy Improvements

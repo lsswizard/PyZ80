@@ -15,6 +15,50 @@ Key lookup tables:
     RL_CARRY_0/1, RR_CARRY_0/1 — RL/RR through carry results
 """
 
+__all__ = [
+    # Flag bit constants
+    "FLAG_S",
+    "FLAG_Z",
+    "FLAG_H",
+    "FLAG_PV",
+    "FLAG_N",
+    "FLAG_C",
+    "FLAG_F5",
+    "FLAG_F3",
+    # Lookup tables
+    "PARITY_TABLE",
+    "SZ_TABLE",
+    "SZ53_TABLE",
+    "SZP_TABLE",
+    "SZ53P_TABLE",
+    "SZHZP_TABLE",
+    "ROT_RESULT",
+    "ROT_CARRY",
+    "RL_CARRY_0",
+    "RL_CARRY_1",
+    "RR_CARRY_0",
+    "RR_CARRY_1",
+    "ADD_FLAGS",
+    "ADC_FLAGS",
+    "SUB_FLAGS",
+    "SBC_FLAGS",
+    "CP_FLAGS",
+    "INC_FLAGS",
+    "DEC_FLAGS_TBL",
+    "COND_TABLE",
+    "_ADD_PAIR",
+    "_SUB_PAIR",
+    # DAA
+    "DAA_TABLE",
+    "DAA_FULL_FLAGS",
+    "get_daa_result",
+    # 16-bit flag helpers
+    "get_adc16_flags",
+    "get_sbc16_flags",
+    # JIT status
+    "NUMBA_AVAILABLE",
+]
+
 # ---------------------------------------------------------------------------
 # Flag bit definitions
 # ---------------------------------------------------------------------------
@@ -740,23 +784,7 @@ def get_daa_result(a: int, f: int) -> tuple:
     h = (f >> 4) & 1
     c = f & 1
     idx = (n << 10) | (h << 9) | (c << 8) | a
-
-    a, new_c, new_h = DAA_TABLE[idx]
-
-    flags = f & ~(FLAG_PV | FLAG_F3 | FLAG_F5 | FLAG_H | FLAG_Z | FLAG_S)
-    if new_c:
-        flags |= FLAG_C
-    if new_h:
-        flags |= FLAG_H
-    if a == 0:
-        flags |= FLAG_Z
-    if a & 0x80:
-        flags |= FLAG_S
-    flags |= a & _F53
-    if PARITY_TABLE[a]:
-        flags |= FLAG_PV
-
-    return a, flags
+    return DAA_FULL_FLAGS[idx]
 
 
 # ===========================================================================
@@ -785,17 +813,21 @@ COND_TABLE = _build_cond_table()
 # ===========================================================================
 # DAA — Decimal Adjust Accumulator lookup table
 # DAA_TABLE[index] = (corrected_A, c_flag, h_flag)
+# DAA_FULL_FLAGS[index] = (corrected_A, full_flags_byte) — ready to use
 # index = (N << 10) | (H << 9) | (C << 8) | A  = 2048 entries
 # Sequential correction: low nibble first, then high nibble on corrected value
 # ===========================================================================
 
 
-def _build_daa_table():
-    table = [(0, 0, 0)] * 2048
+def _build_daa_tables():
+    raw = [(0, 0, 0)] * 2048
+    full = [(0, 0)] * 2048
+
     for n in range(2):
         for h in range(2):
             for c in range(2):
                 base_idx = (n << 10) | (h << 9) | (c << 8)
+                input_f = (n << 1) | c  # N and C from original flags
                 for orig_a in range(256):
                     a = orig_a
                     new_c = c
@@ -808,6 +840,8 @@ def _build_daa_table():
                         if c or a > 0x9F:  # Check AFTER low nibble correction
                             a = (a + 0x60) & 0xFF
                             new_c = 1
+                        else:
+                            a = a & 0xFF
                     else:  # after subtraction
                         if h:
                             a = (a - 0x06) & 0xFF
@@ -816,8 +850,25 @@ def _build_daa_table():
                             a = (a - 0x60) & 0xFF
                             new_c = 1
 
-                    table[base_idx | orig_a] = (a, new_c, new_h)
-    return table
+                    idx = base_idx | orig_a
+                    raw[idx] = (a, new_c, new_h)
+
+                    # Build full flags byte
+                    flags = input_f & FLAG_N  # preserve N
+                    if new_c:
+                        flags |= FLAG_C
+                    if new_h:
+                        flags |= FLAG_H
+                    if a == 0:
+                        flags |= FLAG_Z
+                    if a & 0x80:
+                        flags |= FLAG_S
+                    flags |= a & _F53
+                    if PARITY_TABLE[a]:
+                        flags |= FLAG_PV
+                    full[idx] = (a, flags)
+
+    return raw, full
 
 
-DAA_TABLE = _build_daa_table()
+DAA_TABLE, DAA_FULL_FLAGS = _build_daa_tables()
