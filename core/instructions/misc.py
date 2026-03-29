@@ -24,7 +24,7 @@ from ..flags import (
     FLAG_F3,
     FLAG_F5,
     get_daa_result,
-    get_sub_flags,
+    SUB_FLAGS,
 )
 
 
@@ -118,7 +118,7 @@ def neg(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     a = regs.A
     regs.A = (-a) & 0xFF
-    regs.F = get_sub_flags(0, a)
+    regs.F = SUB_FLAGS[a]
     return 8
 
 
