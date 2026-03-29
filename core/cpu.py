@@ -245,6 +245,8 @@ class Z80CPU:
         addr &= 0xFFFF
         if self._mem[addr] != value:
             self._bus_write_direct(addr, value, cycles)
+            # Invalidate the cache for this address and the 3 preceding bytes
+            # to handle multi-byte instructions that might now be invalid.
             cache = self._cache_list
             cache[addr] = None
             cache[(addr - 1) & 0xFFFF] = None
@@ -360,16 +362,20 @@ class Z80CPU:
             return 4
 
         pc = regs.PC
+        mem = self._mem
+        cache_list = self._cache_list
 
         # --- Opcode fetch: _mem_fast for SimpleBus, bus_read otherwise ---
         if self._is_simple_bus:
-            opcode = self._mem[pc]
+            opcode = mem[pc]
         else:
-            opcode = self._bus_read(pc, cycles)
+            opcode = self._bus_read(pc, self.cycles)
 
         # --- Decode (cache hit is the common case) ---
-        # Accessing self._cache_list directly avoids method call overhead
-        op = self._cache_list[pc] or self._decode(self._mem, pc)
+        # Accessing cache_list directly avoids method call overhead
+        op = cache_list[pc]
+        if op is None:
+            op = self._decode(mem, pc)
 
         if self._trace_enabled:
             self._write_trace(pc, opcode, op)
@@ -385,23 +391,26 @@ class Z80CPU:
         old_f = regs.F
 
         # --- Execute instruction ---
-        self.cycles = cycles + 4  # Pre-credit M1 T4
+        # M1 T1-T4 are always executed. Handler returns TOTAL base cycles.
+        self.cycles += 4
         op_cycles = op.handler(self)
 
         # Set Q = F if this instruction modified flags
         # (EX AF,AF' and POP AF are exceptions that don't set Q)
-        if regs.F != old_f and not _IS_Q_EXCEPT[opcode]:
-            regs.Q = regs.F
+        if op.affects_f:
+            new_f = regs.F
+            if new_f != old_f and not _IS_Q_EXCEPT[opcode]:
+                regs.Q = new_f
 
         if not self._pc_modified:
             regs.PC = (pc + op.length) & 0xFFFF
 
-        # Final cycles update
+        # Final cycles update - base instruction timing only (no contention)
         total_cycles = cycles + op_cycles
         self.cycles = total_cycles
         self.instruction_count += 1
 
-        self._is_ld_a_ir = opcode == 0xED and op.mnemonic in ("LD A,I", "LD A,R")
+        self._is_ld_a_ir = op.is_ld_a_ir
         if self.interrupt_pending:
             regs.UnresolvedPrefix = op.length == 1 and _IS_PREFIXED[opcode]
 

@@ -39,10 +39,8 @@ def _compute_ld_block_flags(regs, a_value: int, bc_after: int) -> None:
 def ldi(cpu: "Z80CPU") -> int:
     """LDI - Load and increment (16 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)
-    cpu._bus_write(regs.DE, value, cycles + 4)
-    cpu.cycles += 16
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)
+    cpu._bus_write(regs.DE, value, cpu.cycles + 4)
     regs.HL = (regs.HL + 1) & 0xFFFF
     regs.DE = (regs.DE + 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
@@ -54,7 +52,6 @@ def ldir(cpu: "Z80CPU") -> int:
     """LDIR - Load, increment, repeat (16/21 T-states)
     When BC=0 before execution, acts as a 2-byte NOP (16 T-states)."""
     if cpu.regs.BC == 0:
-        cpu.cycles += 16
         return 16
     ldi(cpu)
     if cpu.regs.BC != 0:
@@ -66,10 +63,8 @@ def ldir(cpu: "Z80CPU") -> int:
 def ldd(cpu: "Z80CPU") -> int:
     """LDD - Load and decrement (16 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)
-    cpu._bus_write(regs.DE, value, cycles + 4)
-    cpu.cycles += 16
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)
+    cpu._bus_write(regs.DE, value, cpu.cycles + 4)
     regs.HL = (regs.HL - 1) & 0xFFFF
     regs.DE = (regs.DE - 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
@@ -81,7 +76,6 @@ def lddr(cpu: "Z80CPU") -> int:
     """LDDR - Load, decrement, repeat (16/21 T-states)
     When BC=0 before execution, acts as a 2-byte NOP (16 T-states)."""
     if cpu.regs.BC == 0:
-        cpu.cycles += 16
         return 16
     ldd(cpu)
     if cpu.regs.BC != 0:
@@ -93,9 +87,7 @@ def lddr(cpu: "Z80CPU") -> int:
 def cpi(cpu: "Z80CPU") -> int:
     """CPI - Compare and increment (16 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)
-    cpu.cycles += 16
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)
     result = (regs.A - value) & 0xFF
     regs.HL = (regs.HL + 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
@@ -137,13 +129,11 @@ def cpir(cpu: "Z80CPU") -> int:
     """CPIR - Compare, increment, repeat (16/21 T-states).
     Inlined to avoid double bus_read that cpi()+check would cause."""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)
     a = regs.A
     result = (a - value) & 0xFF
     regs.HL = (regs.HL + 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
-    cpu.cycles += 16
     _compute_cpi_flags(regs, a, value, regs.BC)
     if regs.BC != 0 and result != 0:
         cpu._pc_modified = True
@@ -154,9 +144,7 @@ def cpir(cpu: "Z80CPU") -> int:
 def cpd(cpu: "Z80CPU") -> int:
     """CPD - Compare and decrement (16 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)  # fix: was missing +1, matching cpi
-    cpu.cycles += 16  # fix: was missing entirely
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)  # fix: was missing +1, matching cpi
     result = (regs.A - value) & 0xFF
     regs.HL = (regs.HL - 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
@@ -180,13 +168,11 @@ def cpdr(cpu: "Z80CPU") -> int:
     """CPDR - Compare, decrement, repeat (16/21 T-states).
     Inlined to avoid double bus_read that cpd()+check would cause."""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)  # fix: was missing +1, matching cpir
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)  # fix: was missing +1, matching cpir
     a = regs.A
     result = (a - value) & 0xFF
     regs.HL = (regs.HL - 1) & 0xFFFF
     regs.BC = (regs.BC - 1) & 0xFFFF
-    cpu.cycles += 16
     _compute_cpi_flags(regs, a, value, regs.BC)
     if regs.BC != 0 and result != 0:
         cpu._pc_modified = True
@@ -216,10 +202,8 @@ def _compute_in_out_flags(regs, value: int, old_b: int, new_b: int) -> None:
 def ini(cpu: "Z80CPU") -> int:
     """INI - Input and increment (16 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_io_read(regs.BC, cycles + 1)
-    cpu._bus_write(regs.HL, value, cycles + 4)
-    cpu.cycles += 16
+    value = cpu._bus_io_read(regs.BC, cpu.cycles + 1)
+    cpu._bus_write(regs.HL, value, cpu.cycles + 4)
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
     regs.HL = (regs.HL + 1) & 0xFFFF
@@ -231,7 +215,6 @@ def inir(cpu: "Z80CPU") -> int:
     """INIR - Input, increment, repeat (16/21 T-states)
     When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
     if cpu.regs.B == 0:
-        cpu.cycles += 16
         return 16
     old_b = cpu.regs.B
     ini(cpu)
@@ -244,10 +227,8 @@ def inir(cpu: "Z80CPU") -> int:
 def ind(cpu: "Z80CPU") -> int:
     """IND - Input and decrement (16 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_io_read(regs.BC, cycles + 1)
-    cpu._bus_write(regs.HL, value, cycles + 4)
-    cpu.cycles += 16
+    value = cpu._bus_io_read(regs.BC, cpu.cycles + 1)
+    cpu._bus_write(regs.HL, value, cpu.cycles + 4)
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
     regs.HL = (regs.HL - 1) & 0xFFFF
@@ -259,7 +240,6 @@ def indr(cpu: "Z80CPU") -> int:
     """INDR - Input, decrement, repeat (16/21 T-states)
     When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
     if cpu.regs.B == 0:
-        cpu.cycles += 16
         return 16
     old_b = cpu.regs.B
     ind(cpu)
@@ -272,12 +252,10 @@ def indr(cpu: "Z80CPU") -> int:
 def outi(cpu: "Z80CPU") -> int:
     """OUTI - Output and increment (16 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
-    cpu._bus_io_write(regs.BC, value, cycles + 4)
-    cpu.cycles += 16
+    cpu._bus_io_write(regs.BC, value, cpu.cycles + 4)
     regs.HL = (regs.HL + 1) & 0xFFFF
     _compute_in_out_flags(regs, value, old_b, regs.B)
     return 16
@@ -287,7 +265,6 @@ def otir(cpu: "Z80CPU") -> int:
     """OTIR - Output, increment, repeat (16/21 T-states)
     When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
     if cpu.regs.B == 0:
-        cpu.cycles += 16
         return 16
     old_b = cpu.regs.B
     outi(cpu)
@@ -300,12 +277,10 @@ def otir(cpu: "Z80CPU") -> int:
 def outd(cpu: "Z80CPU") -> int:
     """OUTD - Output and decrement (16 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)
     old_b = regs.B
     regs.B = (regs.B - 1) & 0xFF
-    cpu._bus_io_write(regs.BC, value, cycles + 4)
-    cpu.cycles += 16
+    cpu._bus_io_write(regs.BC, value, cpu.cycles + 4)
     regs.HL = (regs.HL - 1) & 0xFFFF
     _compute_in_out_flags(regs, value, old_b, regs.B)
     return 16
@@ -315,7 +290,6 @@ def otdr(cpu: "Z80CPU") -> int:
     """OTDR - Output, decrement, repeat (16/21 T-states)
     When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
     if cpu.regs.B == 0:
-        cpu.cycles += 16
         return 16
     old_b = cpu.regs.B
     outd(cpu)
@@ -328,31 +302,25 @@ def otdr(cpu: "Z80CPU") -> int:
 def in_a_n(cpu: "Z80CPU") -> int:
     """IN A,(n) - Input from port to A (11 T-states)"""
     pc = cpu.regs.PC
-    cycles = cpu.cycles
-    port = cpu._bus_read((pc + 1) & 0xFFFF, cycles + 1)
+    port = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
     addr = (cpu.regs.A << 8) | port
-    cpu.regs.A = cpu._bus_io_read(addr, cycles + 4)
-    cpu.cycles += 11
+    cpu.regs.A = cpu._bus_io_read(addr, cpu.cycles + 4)
     return 11
 
 
 def out_n_a(cpu: "Z80CPU") -> int:
     """OUT (n),A - Output A to port (11 T-states)"""
     pc = cpu.regs.PC
-    cycles = cpu.cycles
-    port = cpu._bus_read((pc + 1) & 0xFFFF, cycles + 1)
+    port = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
     addr = (cpu.regs.A << 8) | port
-    cpu._bus_io_write(addr, cpu.regs.A, cycles + 4)
-    cpu.cycles += 11
+    cpu._bus_io_write(addr, cpu.regs.A, cpu.cycles + 4)
     return 11
 
 
 def in_reg_c(cpu: "Z80CPU", reg: int) -> int:
     """IN r,(C) - Consolidated (12 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_io_read(regs.BC, cycles + 1)
-    cpu.cycles += 12
+    value = cpu._bus_io_read(regs.BC, cpu.cycles + 1)
     if reg != 6:
         cpu.set_reg8(reg, value)
     regs.F = (regs.F & FLAG_C) | (value & (FLAG_S | FLAG_F3 | FLAG_F5))
@@ -398,8 +366,7 @@ def in_f_c(cpu: "Z80CPU") -> int:
 def out_c_reg(cpu: "Z80CPU", reg: int) -> int:
     """OUT (C),r - Consolidated (12 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    cpu._bus_io_write(regs.BC, cpu.get_reg8(reg), cycles)
+    cpu._bus_io_write(regs.BC, cpu.get_reg8(reg), cpu.cycles)
     return 12
 
 
@@ -434,23 +401,20 @@ def out_c_l(cpu: "Z80CPU") -> int:
 def out_c_0(cpu: "Z80CPU") -> int:
     """OUT (C),0 - Output 0 to port (undocumented) (12 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    cpu._bus_io_write(regs.BC, 0, cycles)
+    cpu._bus_io_write(regs.BC, 0, cpu.cycles)
     return 12
 
 
 def rld(cpu: "Z80CPU") -> int:
     """RLD - Rotate digit left (BCD) (18 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)
     low_nibble = value & 0x0F
     high_nibble = value & 0xF0
     a_low = regs.A & 0x0F
     new_value = (low_nibble << 4) | a_low
     new_a = (regs.A & 0xF0) | (high_nibble >> 4)
-    cpu._bus_write(regs.HL, new_value, cycles + 4)
-    cpu.cycles += 18
+    cpu._bus_write(regs.HL, new_value, cpu.cycles + 4)
     regs.A = new_a
     regs.F = regs.F & FLAG_C
     if regs.A == 0:
@@ -466,15 +430,13 @@ def rld(cpu: "Z80CPU") -> int:
 def rrd(cpu: "Z80CPU") -> int:
     """RRD - Rotate digit right (BCD) (18 T-states)"""
     regs = cpu.regs
-    cycles = cpu.cycles
-    value = cpu._bus_read(regs.HL, cycles + 1)
+    value = cpu._bus_read(regs.HL, cpu.cycles + 1)
     low_nibble = value & 0x0F
     high_nibble = value & 0xF0
     a_low = regs.A & 0x0F
     new_value = (a_low << 4) | (high_nibble >> 4)
     new_a = (regs.A & 0xF0) | low_nibble
-    cpu._bus_write(regs.HL, new_value, cycles + 4)
-    cpu.cycles += 18
+    cpu._bus_write(regs.HL, new_value, cpu.cycles + 4)
     regs.A = new_a
     regs.F = regs.F & FLAG_C
     if regs.A == 0:

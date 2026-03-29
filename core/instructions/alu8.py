@@ -438,15 +438,17 @@ def inc_r(cpu: "Z80CPU", dest: int) -> int:
     return 4
 
 
+_INC_FLAGS = INC_FLAGS
+
+
 def inc_hl(cpu: "Z80CPU") -> int:
     """INC (HL) - Increment memory (11 T-states)"""
-    addr = cpu.regs.HL
-    cycles = cpu.cycles
-    value = cpu._bus_read(addr, cycles + 1)
+    regs = cpu.regs
+    addr = regs.HL
+    value = cpu._bus_read(addr, cpu.cycles + 1)
     new_value = (value + 1) & 0xFF
-    cpu._bus_write(addr, new_value, cycles + 4)
-    cpu.cycles += 11
-    cpu.regs.F = (cpu.regs.F & FLAG_C) | INC_FLAGS[value]
+    cpu._bus_write(addr, new_value, cpu.cycles + 4)
+    regs.F = (regs.F & FLAG_C) | _INC_FLAGS[value]
     return 11
 
 
@@ -496,15 +498,17 @@ def dec_r(cpu: "Z80CPU", dest: int) -> int:
     return 4
 
 
+_DEC_FLAGS_TBL = DEC_FLAGS_TBL
+
+
 def dec_hl(cpu: "Z80CPU") -> int:
     """DEC (HL) - Decrement memory (11 T-states)"""
-    addr = cpu.regs.HL
-    cycles = cpu.cycles
-    value = cpu._bus_read(addr, cycles + 1)
+    regs = cpu.regs
+    addr = regs.HL
+    value = cpu._bus_read(addr, cpu.cycles + 1)
     new_value = (value - 1) & 0xFF
-    cpu._bus_write(addr, new_value, cycles + 4)
-    cpu.cycles += 11
-    cpu.regs.F = (cpu.regs.F & FLAG_C) | DEC_FLAGS_TBL[value]
+    cpu._bus_write(addr, new_value, cpu.cycles + 4)
+    regs.F = (regs.F & FLAG_C) | _DEC_FLAGS_TBL[value]
     return 11
 
 
@@ -531,8 +535,7 @@ def add_a_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def add_a_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """ADD A,(IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    b = cpu._bus_read(addr, cycles)
+    b = cpu._bus_read(addr, cpu.cycles)
     a = cpu.regs.A
     cpu.regs.A = (a + b) & 0xFF
     cpu.regs.F = ADD_FLAGS[(a << 8) | b]
@@ -542,8 +545,7 @@ def add_a_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def adc_a_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """ADC A,(IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    b = cpu._bus_read(addr, cycles)
+    b = cpu._bus_read(addr, cpu.cycles)
     regs = cpu.regs
     a = regs.A
     carry = regs.F & FLAG_C
@@ -595,8 +597,7 @@ def sub_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def sub_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """SUB (IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    b = cpu._bus_read(addr, cycles)
+    b = cpu._bus_read(addr, cpu.cycles)
     cpu.regs.F = SUB_FLAGS[(cpu.regs.A << 8) | b]
     cpu.regs.A = (cpu.regs.A - b) & 0xFF
     return 19
@@ -605,8 +606,7 @@ def sub_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def sbc_a_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """SBC A,(IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    b = cpu._bus_read(addr, cycles)
+    b = cpu._bus_read(addr, cpu.cycles)
     regs = cpu.regs
     a = regs.A
     carry = regs.F & FLAG_C
@@ -656,8 +656,7 @@ def and_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def and_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """AND (IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    cpu.regs.A &= cpu._bus_read(addr, cycles)
+    cpu.regs.A &= cpu._bus_read(addr, cpu.cycles)
     cpu.regs.F = SZHZP_TABLE[cpu.regs.A]
     return 19
 
@@ -681,8 +680,7 @@ def or_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def or_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """OR (IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    cpu.regs.A |= cpu._bus_read(addr, cycles)
+    cpu.regs.A |= cpu._bus_read(addr, cpu.cycles)
     cpu.regs.F = SZ53P_TABLE[cpu.regs.A]
     return 19
 
@@ -706,8 +704,7 @@ def xor_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def xor_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """XOR (IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    cpu.regs.A ^= cpu._bus_read(addr, cycles)
+    cpu.regs.A ^= cpu._bus_read(addr, cpu.cycles)
     cpu.regs.F = SZ53P_TABLE[cpu.regs.A]
     return 19
 
@@ -731,8 +728,7 @@ def cp_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def cp_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """CP (IX/IY+d) (19 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    b = cpu._bus_read(addr, cycles)
+    b = cpu._bus_read(addr, cpu.cycles)
     cpu.regs.F = CP_FLAGS[(cpu.regs.A << 8) | b]
     return 19
 
@@ -766,10 +762,9 @@ def inc_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def inc_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """INC (IX/IY+d) (23 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    value = cpu._bus_read(addr, cycles + 4)
+    value = cpu._bus_read(addr, cpu.cycles + 4)
     new_value = (value + 1) & 0xFF
-    cpu._bus_write(addr, new_value, cycles + 7)
+    cpu._bus_write(addr, new_value, cpu.cycles + 7)
     cpu.cycles += 23
     cpu.regs.F = (cpu.regs.F & FLAG_C) | INC_FLAGS[value]
     return 23
@@ -804,10 +799,9 @@ def dec_ixl(cpu: "Z80CPU", is_iy: bool = False) -> int:
 def dec_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     """DEC (IX/IY+d) (23 T-states)"""
     addr = _get_indexed_addr(cpu, is_iy)
-    cycles = cpu.cycles
-    value = cpu._bus_read(addr, cycles + 4)
+    value = cpu._bus_read(addr, cpu.cycles + 4)
     new_value = (value - 1) & 0xFF
-    cpu._bus_write(addr, new_value, cycles + 7)
+    cpu._bus_write(addr, new_value, cpu.cycles + 7)
     cpu.cycles += 23
     cpu.regs.F = (cpu.regs.F & FLAG_C) | DEC_FLAGS_TBL[value]
     return 23

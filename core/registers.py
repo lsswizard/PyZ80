@@ -203,15 +203,15 @@ class Registers:
             if key in slots:
                 setattr(self, key, value)
 
-    _REG16_GETTERS = (
-        lambda self: (self.B << 8) | self.C,
-        lambda self: (self.D << 8) | self.E,
-        lambda self: (self.H << 8) | self.L,
-        lambda self: self.SP,
-    )
-
     def get_reg16(self, pair: int) -> int:
-        return self._REG16_GETTERS[pair](self)
+        if pair == 0:
+            return (self.B << 8) | self.C
+        elif pair == 1:
+            return (self.D << 8) | self.E
+        elif pair == 2:
+            return (self.H << 8) | self.L
+        else:
+            return self.SP
 
     def set_reg16(self, pair: int, value: int) -> None:
         # Inline to avoid lambda + setattr + property lookup chain.
@@ -229,15 +229,15 @@ class Registers:
         else:
             self.SP = v
 
-    _REG16_PUSH_GETTERS = (
-        lambda self: (self.B << 8) | self.C,
-        lambda self: (self.D << 8) | self.E,
-        lambda self: (self.H << 8) | self.L,
-        lambda self: (self.A << 8) | self.F,
-    )
-
     def get_reg16_push(self, pair: int) -> int:
-        return self._REG16_PUSH_GETTERS[pair](self)
+        if pair == 0:
+            return (self.B << 8) | self.C
+        elif pair == 1:
+            return (self.D << 8) | self.E
+        elif pair == 2:
+            return (self.H << 8) | self.L
+        else:
+            return (self.A << 8) | self.F
 
     def set_reg16_push(self, pair: int, value: int) -> None:
         # Inline to avoid lambda + setattr + property lookup chain.

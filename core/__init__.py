@@ -18,6 +18,7 @@ from .bus import Z80Bus, SimpleBus
 from .state import CPUState, StateManager
 from .decoder import InstructionDecoder
 from .primitives import MicroOp
+from .timing import TimingInfo, TimingEngine
 
 __all__ = [
     "Z80CPU",
@@ -28,4 +29,6 @@ __all__ = [
     "MicroOp",
     "Z80Bus",
     "SimpleBus",
+    "TimingInfo",
+    "TimingEngine",
 ]

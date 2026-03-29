@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0] - 2026-03-29
+
+### Performance Improvements
+- **MicroOp Enhancement**: Added `is_ld_a_ir` and `affects_f` boolean attributes to MicroOp, eliminating string comparisons in hot path
+- **CPU.step() Optimization**: Uses `op.affects_f` instead of flag comparison, `op.is_ld_a_ir` instead of opcode+string check
+- **CP_FLAGS Memory Optimization**: Changed from 64KB pre-computed table to lazy `_CPFlags` proxy class (~64KB RAM saved)
+- **Simplified Public API**: Removed redundant `get_*` wrapper functions, cleaner backend selection
+
+### Bug Fixes
+- **Fixed Import Error**: `core/__init__.py` now correctly imports from `.cpu` instead of non-existent `.core`
+- **Fixed cycle timing bug**: Changed `self._bus_read(pc, cycles)` to `self._bus_read(pc, self.cycles)` in step()
+
+### Verified
+- All 916 tests pass
+
 ## [1.8.1] - 2026-03-29
 
 ### Performance Improvements

@@ -187,12 +187,10 @@ def _build_alu_flag_tables():
     arithmetic).  AND/OR/XOR use *parity* — those continue to use the
     existing SZ53P_TABLE / SZHZP_TABLE lookups.
     """
-    _F53 = FLAG_F3 | FLAG_F5
     add = bytearray(65536)
     adc = bytearray(65536)
     sub = bytearray(65536)
     sbc = bytearray(65536)
-    cp = bytearray(65536)
     inc = bytearray(256)
     dec = bytearray(256)
 
@@ -280,27 +278,28 @@ def _build_alu_flag_tables():
                 f |= FLAG_PV
             sbc[idx] = f
 
-            # CP: F3/F5 from operand b (not the subtraction result)
-            r8 = (a - b) & 0xFF
-            f = FLAG_N | (b & _F53)
-            if r8 & 0x80:
-                f |= FLAG_S
-            if r8 == 0:
-                f |= FLAG_Z
-            if (a & 0x0F) < (b & 0x0F):
-                f |= FLAG_H
-            if a < b:
-                f |= FLAG_C
-            if ((a ^ b) & 0x80) != 0 and ((r8 ^ a) & 0x80) != 0:
-                f |= FLAG_PV
-            cp[idx] = f
-
-    return add, adc, sub, sbc, cp, inc, dec
+    return add, adc, sub, sbc, inc, dec
 
 
-(ADD_FLAGS, ADC_FLAGS, SUB_FLAGS, SBC_FLAGS, CP_FLAGS, INC_FLAGS, DEC_FLAGS_TBL) = (
+(ADD_FLAGS, ADC_FLAGS, SUB_FLAGS, SBC_FLAGS, INC_FLAGS, DEC_FLAGS_TBL) = (
     _build_alu_flag_tables()
 )
+
+
+class _CPFlags(bytearray):
+    """CP flags proxy — derives from SUB_FLAGS at lookup time.
+
+    CP differs from SUB only in F3/F5 sourcing: operand b instead of result.
+    This avoids a separate 64KB table by patching SUB_FLAGS on the fly.
+    """
+
+    __slots__ = ()
+
+    def __getitem__(self, idx):
+        return (SUB_FLAGS[idx] & ~_F53) | (idx & _F53)
+
+
+CP_FLAGS = _CPFlags(65536)
 
 # Pair tables for carry-indexed dispatch (FLAG_C == 1, so carry is 0 or 1)
 _ADD_PAIR = (ADD_FLAGS, ADC_FLAGS)  # _ADD_PAIR[carry][(a<<8)|b]
@@ -501,7 +500,7 @@ def _parity_python(val: int) -> int:
 
 
 def _add_flags_python(a: int, b: int, result: int, full_result: int) -> int:
-    flags = 0
+    flags = 0  # N cleared (addition)
     if result & 0x80:
         flags |= FLAG_S
     if result == 0:
@@ -660,117 +659,81 @@ def _sbc16_flags_python(hl: int, reg: int, carry: int, result: int) -> int:
 
 
 # ===========================================================================
-# Public API — selects JIT or Python
+# Public API — selects JIT or Python backend
 # ===========================================================================
 
+# Select backend functions
 if NUMBA_AVAILABLE:
     parity = _parity_fast
-
-    def add_flags(a, b, carry=0, f=0):
-        return _add_flags_jit(a, b, (a + b + carry) & 0xFF, a + b + carry)
-
-    def adc_flags(a, b, carry, f=0):
-        return _adc_flags_jit(a, b, carry, (a + b + carry) & 0xFF, a + b + carry)
-
-    def sub_flags(a, b, carry=0, f=0):
-        return _sub_flags_jit(a, b, (a - b - carry) & 0xFF, a - b - carry)
-
-    def sbc_flags(a, b, carry, f=0):
-        return _sbc_flags_jit(a, b, carry, (a - b - carry) & 0xFF, a - b - carry)
-
-    inc_flags = lambda old, new, f=0: _inc_flags_jit(old, new, f)
-    dec_flags = lambda old, new, f=0: _dec_flags_jit(old, new, f)
-    and_flags = _and_flags_jit
-    or_flags = _or_flags_jit
-    xor_flags = _xor_flags_jit
-
-    def cp_flags(a, b, f=0):
-        return _cp_flags_jit(a, b, (a - b) & 0xFF)
-
-    add16_flags = _add16_flags_jit
-    adc16_flags = _adc16_flags_jit
-    sbc16_flags = _sbc16_flags_jit
+    _bf_add = _add_flags_jit
+    _bf_adc = _adc_flags_jit
+    _bf_sub = _sub_flags_jit
+    _bf_sbc = _sbc_flags_jit
+    _bf_inc = _inc_flags_jit
+    _bf_dec = _dec_flags_jit
+    _bf_and = _and_flags_jit
+    _bf_or = _or_flags_jit
+    _bf_xor = _xor_flags_jit
+    _bf_cp = _cp_flags_jit
+    _bf_add16 = _add16_flags_jit
+    _bf_adc16 = _adc16_flags_jit
+    _bf_sbc16 = _sbc16_flags_jit
 else:
     parity = _parity_python
-
-    def add_flags(a, b, carry=0, f=0):
-        return _add_flags_python(a, b, (a + b + carry) & 0xFF, a + b + carry)
-
-    def adc_flags(a, b, carry, f=0):
-        return _adc_flags_python(a, b, carry, (a + b + carry) & 0xFF, a + b + carry)
-
-    def sub_flags(a, b, carry=0, f=0):
-        return _sub_flags_python(a, b, (a - b - carry) & 0xFF, a - b - carry)
-
-    def sbc_flags(a, b, carry, f=0):
-        return _sbc_flags_python(a, b, carry, (a - b - carry) & 0xFF, a - b - carry)
-
-    inc_flags = lambda old, new, f=0: _inc_flags_python(old, new, f)
-    dec_flags = lambda old, new, f=0: _dec_flags_python(old, new, f)
-    and_flags = _and_flags_python
-    or_flags = _or_flags_python
-    xor_flags = _xor_flags_python
-
-    def cp_flags(a, b, f=0):
-        return _cp_flags_python(a, b, (a - b) & 0xFF)
-
-    add16_flags = _add16_flags_python
-    adc16_flags = _adc16_flags_python
-    sbc16_flags = _sbc16_flags_python
+    _bf_add = _add_flags_python
+    _bf_adc = _adc_flags_python
+    _bf_sub = _sub_flags_python
+    _bf_sbc = _sbc_flags_python
+    _bf_inc = _inc_flags_python
+    _bf_dec = _dec_flags_python
+    _bf_and = _and_flags_python
+    _bf_or = _or_flags_python
+    _bf_xor = _xor_flags_python
+    _bf_cp = _cp_flags_python
+    _bf_add16 = _add16_flags_python
+    _bf_adc16 = _adc16_flags_python
+    _bf_sbc16 = _sbc16_flags_python
 
 
-# ===========================================================================
-# Legacy compatibility wrappers
-# ===========================================================================
+def add_flags(a, b, carry=0, f=0):
+    return _bf_add(a, b, (a + b + carry) & 0xFF, a + b + carry)
 
 
-def get_add_flags(a: int, b: int, carry: int = 0) -> int:
-    """Single table lookup — 2-3x faster than the previous branch-heavy path."""
-    return _ADD_PAIR[carry & 1][(a << 8) | b]
+def adc_flags(a, b, carry, f=0):
+    return _bf_adc(a, b, carry, (a + b + carry) & 0xFF, a + b + carry)
 
 
-def get_sub_flags(a: int, b: int, carry: int = 0) -> int:
-    """Single table lookup — 2-3x faster than the previous branch-heavy path."""
-    return _SUB_PAIR[carry & 1][(a << 8) | b]
+def sub_flags(a, b, carry=0, f=0):
+    return _bf_sub(a, b, (a - b - carry) & 0xFF, a - b - carry)
 
 
-def get_and_flags(result: int) -> int:
-    return SZHZP_TABLE[result]
+def sbc_flags(a, b, carry, f=0):
+    return _bf_sbc(a, b, carry, (a - b - carry) & 0xFF, a - b - carry)
 
 
-def get_or_flags(result: int) -> int:
-    return SZ53P_TABLE[result]
+inc_flags = lambda old, new, f=0: _bf_inc(old, new, f)
+dec_flags = lambda old, new, f=0: _bf_dec(old, new, f)
+and_flags = _bf_and
+or_flags = _bf_or
+xor_flags = _bf_xor
 
 
-def get_xor_flags(result: int) -> int:
-    return SZ53P_TABLE[result]
+def cp_flags(a, b, f=0):
+    return _bf_cp(a, b, (a - b) & 0xFF)
 
 
-def get_cp_flags(a: int, b: int) -> int:
-    """Single table lookup — CP stores F3/F5 from operand b (not subtraction result)."""
-    return CP_FLAGS[(a << 8) | b]
-
-
-def get_inc_flags(a: int) -> int:
-    """Single table lookup — 5x faster than the previous function path."""
-    return INC_FLAGS[a]
-
-
-def get_dec_flags(a: int) -> int:
-    """Single table lookup — 5x faster than the previous function path."""
-    return DEC_FLAGS_TBL[a]
-
-
-def get_add16_flags(hl: int, reg: int, current_f: int) -> int:
-    return add16_flags(hl, reg, current_f)
-
+add16_flags = _bf_add16
+adc16_flags = _bf_adc16
+sbc16_flags = _bf_sbc16
 
 def get_adc16_flags(hl: int, reg: int, carry: int) -> int:
-    return adc16_flags(hl, reg, carry, (hl + reg + carry) & 0xFFFF)
+    result = (hl + reg + carry) & 0xFFFF
+    return _bf_adc16(hl, reg, carry, result)
 
 
 def get_sbc16_flags(hl: int, reg: int, carry: int) -> int:
-    return sbc16_flags(hl, reg, carry, (hl - reg - carry) & 0xFFFF)
+    result = (hl - reg - carry) & 0xFFFF
+    return _bf_sbc16(hl, reg, carry, result)
 
 
 # ===========================================================================
@@ -811,11 +774,12 @@ COND_TABLE = _build_cond_table()
 
 
 # ===========================================================================
-# DAA — Decimal Adjust Accumulator lookup table
-# DAA_TABLE[index] = (corrected_A, c_flag, h_flag)
-# DAA_FULL_FLAGS[index] = (corrected_A, full_flags_byte) — ready to use
+# DAA — Decimal Adjust Accumulator lookup tables
 # index = (N << 10) | (H << 9) | (C << 8) | A  = 2048 entries
 # Sequential correction: low nibble first, then high nibble on corrected value
+#
+# DAA_TABLE[index]      = (corrected_A, c_flag, h_flag)  — raw correction
+# DAA_FULL_FLAGS[index] = (corrected_A, full_flags_byte) — ready to use
 # ===========================================================================
 
 
@@ -835,9 +799,9 @@ def _build_daa_tables():
 
                     if not n:  # after addition
                         if h or (a & 0x0F) > 9:
-                            a = (a + 0x06) & 0xFF
+                            a = a + 0x06
                             new_h = 1
-                        if c or a > 0x9F:  # Check AFTER low nibble correction
+                        if c or a > 0x9F:
                             a = (a + 0x60) & 0xFF
                             new_c = 1
                         else:

@@ -17,7 +17,8 @@ class MicroOp:
     and reduce per-instruction attribute access cost (~12% faster than
     a plain dataclass on the hot handler-call path).
     """
-    __slots__ = ('handler', 'cycles', 'length', 'mnemonic')
+
+    __slots__ = ("handler", "cycles", "length", "mnemonic", "is_ld_a_ir", "affects_f")
 
     def __init__(
         self,
@@ -25,16 +26,18 @@ class MicroOp:
         cycles: int,
         length: int,
         mnemonic: str = "",
+        is_ld_a_ir: bool = False,
+        affects_f: bool = False,
     ) -> None:
-        self.handler  = handler
-        self.cycles   = cycles
-        self.length   = length
+        self.handler = handler
+        self.cycles = cycles
+        self.length = length
         self.mnemonic = mnemonic
+        self.is_ld_a_ir = is_ld_a_ir
+        self.affects_f = affects_f
 
     def __repr__(self) -> str:
-        return (
-            f"MicroOp({self.mnemonic!r}, cycles={self.cycles}, length={self.length})"
-        )
+        return f"MicroOp({self.mnemonic!r}, cycles={self.cycles}, length={self.length})"
 
 
 # =============================================================================
@@ -68,7 +71,7 @@ def read_word(mem: Any, addr: int, cpu: Any = None) -> int:
         high = cpu.read_byte((addr + 1) & 0xFFFF)
         return low | (high << 8)
     if hasattr(mem, "read_byte"):
-        low  = mem.read_byte(addr & 0xFFFF, 0)
+        low = mem.read_byte(addr & 0xFFFF, 0)
         high = mem.read_byte((addr + 1) & 0xFFFF, 0)
         return low | (high << 8)
     addr &= 0xFFFF

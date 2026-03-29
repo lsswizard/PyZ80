@@ -118,7 +118,7 @@ def neg(cpu: "Z80CPU") -> int:
     regs = cpu.regs
     a = regs.A
     regs.A = (-a) & 0xFF
-    regs.F = SUB_FLAGS[a]
+    regs.F = SUB_FLAGS[a]  # 0 - a = -a, so we use a as the operand
     return 8
 
 

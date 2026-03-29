@@ -17,7 +17,7 @@ from ..flags import (
     FLAG_S,
     FLAG_Z,
     FLAG_PV,
-    get_add16_flags,
+    add16_flags,
     get_adc16_flags,
     get_sbc16_flags,
 )
@@ -29,7 +29,7 @@ def add_hl_rr(cpu: "Z80CPU", reg_pair: int) -> int:
     hl = regs.HL
     operand = regs.get_reg16(reg_pair)
     regs.HL = (hl + operand) & 0xFFFF
-    regs.F = (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | get_add16_flags(hl, operand, regs.F)
+    regs.F = (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | add16_flags(hl, operand, regs.F)
     return 11
 
 
@@ -83,7 +83,7 @@ def add_ix_rr(cpu: "Z80CPU", reg_pair: int, is_iy: bool = False) -> int:
         operand = regs.IX if reg_pair == 2 else regs.get_reg16(reg_pair)
         result = (ix + operand) & 0xFFFF
         regs.IX = result
-    regs.F = (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | get_add16_flags(ix, operand, regs.F)
+    regs.F = (regs.F & (FLAG_S | FLAG_Z | FLAG_PV)) | add16_flags(ix, operand, regs.F)
     return 15
 
 

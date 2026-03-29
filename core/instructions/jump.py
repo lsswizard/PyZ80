@@ -21,9 +21,12 @@ from .ld16 import _push_word, _pop_word
 from ..flags import COND_TABLE
 
 
+_COND_TABLE = COND_TABLE
+
+
 def _cond(cpu, condition):
-    """Inline condition check - avoids method dispatch overhead."""
-    return COND_TABLE[(cpu.regs.F << 3) | (condition & 0x07)]
+    # Inline lookup to reduce call overhead for the most frequent branch checks.
+    return _COND_TABLE[(cpu.regs.F << 3) | (condition & 0x07)]
 
 
 def jp_nn(cpu: "Z80CPU") -> int:
@@ -48,7 +51,6 @@ def jr_e(cpu: "Z80CPU") -> int:
     offset = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
     if offset >= 128:
         offset -= 256
-    cpu.cycles += 12
     regs.PC = (pc + 2 + offset) & 0xFFFF
     cpu._pc_modified = True
     return 12
@@ -56,13 +58,12 @@ def jr_e(cpu: "Z80CPU") -> int:
 
 def jr_cc_e(cpu: "Z80CPU", condition: int) -> int:
     """JR cc,e - Conditional relative jump (7/12 T-states)"""
-    if _cond(cpu, condition):
+    if _COND_TABLE[(cpu.regs.F << 3) | (condition & 0x07)]:
         regs = cpu.regs
         pc = regs.PC
         offset = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
         if offset >= 128:
             offset -= 256
-        cpu.cycles += 12
         regs.PC = (pc + 2 + offset) & 0xFFFF
         cpu._pc_modified = True
         return 12
@@ -86,7 +87,6 @@ def djnz_e(cpu: "Z80CPU") -> int:
         offset = cpu._bus_read((pc + 1) & 0xFFFF, cpu.cycles + 1)
         if offset >= 128:
             offset -= 256
-        cpu.cycles += 13
         regs.PC = (pc + 2 + offset) & 0xFFFF
         cpu._pc_modified = True
         return 13

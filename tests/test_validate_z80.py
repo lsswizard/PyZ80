@@ -7,7 +7,7 @@ Tests the PythonZ80 implementation against expected Z80 behavior.
 import sys
 import pytest
 
-sys.path.insert(0, "/home/lss/builds/PyZ80")
+sys.path.insert(0, "/home/lss/builds/PythonZ80")
 
 from core import Z80CPU
 from core.instructions import block, bit
@@ -19,8 +19,8 @@ from core.flags import (
     FLAG_N,
     FLAG_C,
     PARITY_TABLE,
-    get_add_flags,
-    get_sub_flags,
+    ADD_FLAGS,
+    SUB_FLAGS,
 )
 
 # ============================================================
@@ -344,7 +344,7 @@ class TestAddFlags:
         write_program(cpu, [0x3E, a, 0xC6, b])
         cpu.step()
         cpu.step()
-        expected_flags = get_add_flags(a, b)
+        expected_flags = ADD_FLAGS[(a << 8) | b]
         mask = FLAG_S | FLAG_Z | FLAG_H | FLAG_PV | FLAG_C | FLAG_N
         assert cpu.regs.A == (a + b) & 0xFF
         assert (cpu.regs.F & mask) == (expected_flags & mask)
@@ -577,7 +577,7 @@ class TestSubFlags:
         write_program(cpu, [0x3E, a, 0xD6, b])
         cpu.step()
         cpu.step()
-        expected_flags = get_sub_flags(a, b)
+        expected_flags = SUB_FLAGS[(a << 8) | b]
         mask = FLAG_S | FLAG_Z | FLAG_H | FLAG_PV | FLAG_C | FLAG_N
         assert cpu.regs.A == (a - b) & 0xFF
         assert (cpu.regs.F & mask) == (expected_flags & mask)
@@ -3974,12 +3974,12 @@ class TestDAAComprehensive:
         assert flag_clear(cpu, FLAG_C)
 
     def test_daa_add_f9_01(self, cpu):
-        """DAA: 0xF9 + 0x01 = 0xFA, lower nibble > 9, DAA adds 0x06 -> 0x00."""
+        """DAA: 0xF9 + 0x01 = 0xFA, high nibble > 9, DAA adds 0x66 -> 0x60, C=1."""
         cpu.regs.A = 0xF9
         write_program(cpu, [0xC6, 0x01, 0x27])
         step_n(cpu, 2)
-        assert cpu.regs.A == 0x00
-        assert flag_clear(cpu, FLAG_C)
+        assert cpu.regs.A == 0x60
+        assert flag_set(cpu, FLAG_C)
 
     def test_daa_sub_10_01(self, cpu):
         """DAA: 0x10 - 0x01 = 0x09."""

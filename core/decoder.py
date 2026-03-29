@@ -94,7 +94,7 @@ class InstructionDecoder:
             entry = get_cb_opcode(cb_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
-                return MicroOp(handler, cycles, length, mnemonic)
+                return MicroOp(handler, cycles, length, mnemonic, affects_f=True)
             return MicroOp(nop, 8, 2, f"NOP* (CB {cb_op:02X})")
 
         elif opcode == 0xED:
@@ -102,7 +102,13 @@ class InstructionDecoder:
             entry = get_ed_opcode(ed_op)
             if entry:
                 handler, cycles, length, mnemonic = entry
-                return MicroOp(handler, cycles, length, mnemonic)
+                is_ld_a_ir = ed_op == 0x57 or ed_op == 0x5F  # LD A,I or LD A,R
+                # Most ED instructions affect flags, including block ops, 16-bit ALU, NEG, IN, LD A,I/R
+                # Non-affecting: LD (nn),rr, LD rr,(nn), RETI, RETN, IM n, OUT (C),r
+                affects_f = is_ld_a_ir or (0xA0 <= ed_op <= 0xBF) or \
+                            (ed_op in (0x42, 0x52, 0x62, 0x72, 0x4A, 0x5A, 0x6A, 0x7A, 0x44, 0x4C, 0x54, 0x5C, 0x64, 0x6C, 0x74, 0x7C, 0x67, 0x6F)) or \
+                            ((ed_op & 0xC7) == 0x40) # IN r,(C)
+                return MicroOp(handler, cycles, length, mnemonic, is_ld_a_ir=is_ld_a_ir, affects_f=affects_f)
             return MicroOp(nop, 8, 2, f"NOP* (ED {ed_op:02X})")
 
         elif opcode == 0xDD:
@@ -119,7 +125,7 @@ class InstructionDecoder:
                 entry = get_ddcb_opcode(cb_op)
                 if entry:
                     handler, cycles, _, mnemonic = entry
-                    return MicroOp(handler, cycles, 4, mnemonic)  # direct — no lambda wrapper
+                    return MicroOp(handler, cycles, 4, mnemonic)
                 return MicroOp(nop, 23, 4, "NOP* (DDCB)")
             entry = get_dd_opcode(dd_op)
             if entry:
@@ -143,7 +149,7 @@ class InstructionDecoder:
                 entry = get_fdcb_opcode(cb_op)
                 if entry:
                     handler, cycles, _, mnemonic = entry
-                    return MicroOp(handler, cycles, 4, mnemonic)  # direct — no lambda wrapper
+                    return MicroOp(lambda cpu, h=handler: h(cpu), cycles, 4, mnemonic)
                 return MicroOp(nop, 23, 4, "NOP* (FDCB)")
             entry = get_fd_opcode(fd_op)
             if entry:
@@ -160,7 +166,12 @@ class InstructionDecoder:
             entry = get_base_opcode(opcode)
             if entry:
                 handler, cycles, length, mnemonic = entry
-                return MicroOp(handler, cycles, length, mnemonic)
+                # Logic for base opcodes that affect flags
+                affects_f = opcode in (0x07, 0x08, 0x0F, 0x17, 0x1F, 0x27, 0x2F, 0x37, 0x3F, 0xF1) or \
+                            (0x80 <= opcode <= 0xBF) or \
+                            ((opcode & 0xC7) == 0x04) or ((opcode & 0xC7) == 0x05) or \
+                            ((opcode & 0xCF) == 0x09)
+                return MicroOp(handler, cycles, length, mnemonic, affects_f=affects_f)
             return MicroOp(nop, 4, 1, f"NOP* ({opcode:02X})")
 
     def decode(self, memory, addr: int) -> MicroOp:
