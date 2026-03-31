@@ -3,8 +3,8 @@ Z80 CPU State Module
 Snapshot and restore CPU state for debugging, rewind, and testing.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional
+from dataclasses import dataclass
+from typing import Dict, Any
 import copy
 
 
@@ -156,60 +156,3 @@ class CPUState:
         if self.F & 0x01:
             parts.append("C")
         return "".join(parts) if parts else "----"
-
-
-class StateManager:
-    """
-    Manages a rolling history of CPU state snapshots.
-
-    Supports rewind / forward navigation for debugging.
-    """
-
-    def __init__(self, max_history: int = 1000):
-        self.max_history = max_history
-        self.history: list[CPUState] = []
-        self.current_index: int = -1
-
-    def record(self, state: CPUState) -> None:
-        """Append a snapshot, truncating any forward history."""
-        if self.current_index < len(self.history) - 1:
-            self.history = self.history[: self.current_index + 1]
-
-        self.history.append(state.copy())
-        self.current_index = len(self.history) - 1
-
-        if len(self.history) > self.max_history:
-            self.history.pop(0)
-            self.current_index -= 1
-
-    def can_rewind(self) -> bool:
-        return self.current_index > 0
-
-    def can_forward(self) -> bool:
-        return self.current_index < len(self.history) - 1
-
-    def rewind(self) -> Optional[CPUState]:
-        if self.can_rewind():
-            self.current_index -= 1
-            return self.history[self.current_index].copy()
-        return None
-
-    def forward(self) -> Optional[CPUState]:
-        if self.can_forward():
-            self.current_index += 1
-            return self.history[self.current_index].copy()
-        return None
-
-    def current(self) -> Optional[CPUState]:
-        if 0 <= self.current_index < len(self.history):
-            return self.history[self.current_index].copy()
-        return None
-
-    def clear(self) -> None:
-        self.history.clear()
-        self.current_index = -1
-
-    def compare(self, state1: CPUState, state2: CPUState) -> Dict[str, tuple]:
-        """Return a dict of fields that differ between two states."""
-        d1, d2 = state1.to_dict(), state2.to_dict()
-        return {k: (d1[k], d2[k]) for k in d1 if d1[k] != d2[k]}

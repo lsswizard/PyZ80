@@ -49,10 +49,7 @@ def ldi(cpu: "Z80CPU") -> int:
 
 
 def ldir(cpu: "Z80CPU") -> int:
-    """LDIR - Load, increment, repeat (16/21 T-states)
-    When BC=0 before execution, acts as a 2-byte NOP (16 T-states)."""
-    if cpu.regs.BC == 0:
-        return 16
+    """LDIR - Load, increment, repeat (16/21 T-states)"""
     ldi(cpu)
     if cpu.regs.BC != 0:
         cpu._pc_modified = True
@@ -73,10 +70,7 @@ def ldd(cpu: "Z80CPU") -> int:
 
 
 def lddr(cpu: "Z80CPU") -> int:
-    """LDDR - Load, decrement, repeat (16/21 T-states)
-    When BC=0 before execution, acts as a 2-byte NOP (16 T-states)."""
-    if cpu.regs.BC == 0:
-        return 16
+    """LDDR - Load, decrement, repeat (16/21 T-states)"""
     ldd(cpu)
     if cpu.regs.BC != 0:
         cpu._pc_modified = True
@@ -182,7 +176,8 @@ def cpdr(cpu: "Z80CPU") -> int:
 
 def _compute_in_out_flags(regs, value: int, old_b: int, new_b: int) -> None:
     """Compute flags for INI/IND/OUTI/OUTD instructions.
-    N flag = bit 7 of the transferred value."""
+    PV = parity of ((value + old_b) & 0x07).
+    """
     f = FLAG_C if regs.F & FLAG_C else 0
     if value & 0x80:
         f |= FLAG_N
@@ -192,9 +187,7 @@ def _compute_in_out_flags(regs, value: int, old_b: int, new_b: int) -> None:
         f |= FLAG_Z
     if (old_b & 0x0F) == 0:
         f |= FLAG_H
-    # PV = parity of (new_b & 0x07) XOR (value & 0x02)/2 ??? No.
-    # Simplified: PV = 1 if old_b == 0x80 (wrapping to 0xFF)
-    if old_b == 0x80:
+    if PARITY_TABLE[(value + old_b) & 0x07]:
         f |= FLAG_PV
     regs.F = f
 
@@ -212,10 +205,7 @@ def ini(cpu: "Z80CPU") -> int:
 
 
 def inir(cpu: "Z80CPU") -> int:
-    """INIR - Input, increment, repeat (16/21 T-states)
-    When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
-    if cpu.regs.B == 0:
-        return 16
+    """INIR - Input, increment, repeat (16/21 T-states)"""
     old_b = cpu.regs.B
     ini(cpu)
     if old_b != 1:
@@ -237,10 +227,7 @@ def ind(cpu: "Z80CPU") -> int:
 
 
 def indr(cpu: "Z80CPU") -> int:
-    """INDR - Input, decrement, repeat (16/21 T-states)
-    When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
-    if cpu.regs.B == 0:
-        return 16
+    """INDR - Input, decrement, repeat (16/21 T-states)"""
     old_b = cpu.regs.B
     ind(cpu)
     if old_b != 1:
@@ -262,10 +249,7 @@ def outi(cpu: "Z80CPU") -> int:
 
 
 def otir(cpu: "Z80CPU") -> int:
-    """OTIR - Output, increment, repeat (16/21 T-states)
-    When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
-    if cpu.regs.B == 0:
-        return 16
+    """OTIR - Output, increment, repeat (16/21 T-states)"""
     old_b = cpu.regs.B
     outi(cpu)
     if old_b != 1:
@@ -287,10 +271,7 @@ def outd(cpu: "Z80CPU") -> int:
 
 
 def otdr(cpu: "Z80CPU") -> int:
-    """OTDR - Output, decrement, repeat (16/21 T-states)
-    When B=0 before execution, acts as a 2-byte NOP (16 T-states)."""
-    if cpu.regs.B == 0:
-        return 16
+    """OTDR - Output, decrement, repeat (16/21 T-states)"""
     old_b = cpu.regs.B
     outd(cpu)
     if old_b != 1:

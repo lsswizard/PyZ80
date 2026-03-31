@@ -765,7 +765,6 @@ def inc_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     value = cpu._bus_read(addr, cpu.cycles + 4)
     new_value = (value + 1) & 0xFF
     cpu._bus_write(addr, new_value, cpu.cycles + 7)
-    cpu.cycles += 23
     cpu.regs.F = (cpu.regs.F & FLAG_C) | INC_FLAGS[value]
     return 23
 
@@ -802,6 +801,5 @@ def dec_ixd(cpu: "Z80CPU", is_iy: bool = False) -> int:
     value = cpu._bus_read(addr, cpu.cycles + 4)
     new_value = (value - 1) & 0xFF
     cpu._bus_write(addr, new_value, cpu.cycles + 7)
-    cpu.cycles += 23
     cpu.regs.F = (cpu.regs.F & FLAG_C) | DEC_FLAGS_TBL[value]
     return 23

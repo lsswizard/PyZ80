@@ -89,16 +89,12 @@ The CPU provides helper methods for 16-bit operations:
 ```python
 # Read/write 16-bit values
 addr = 0x8000
-value = cpu.read16(addr)  # Little-endian
-cpu.write16(addr, value)
+value = cpu.read16_at(addr, t_state)  # Little-endian, cycle-exact
+cpu.write16_at(addr, value, t_state)
 
-# Stack operations
-cpu.push16(0x1234)
-value = cpu.pop16()
-
-# Call/Return helpers
-new_pc = cpu.call(0x1000)
-return_pc = cpu.ret()
+# Byte-level access
+value = cpu.read_byte(addr)
+cpu.write_byte(addr, value)
 ```
 
 ## Testing
@@ -109,22 +105,23 @@ Run the validation suite (916 tests):
 pytest tests/
 ```
 
-Run specific timing tests:
+Run benchmarks:
 
 ```bash
-pytest tests/test_validate_z80.py::TestTiming -v
+python benchmark.py
 ```
 
 ## Performance Notes
 
 - **SimpleBus Fast-Path**: Direct memory array access when using SimpleBus (eliminates function call overhead)
 - **Pre-credit Cycle Timing**: Cleaner M1 cycle accounting via pre-credit approach
-- **Precomputed ALU Flags**: 320KB lookup tables for ADD/SUB/CP/INC/DEC operations (~2-5x faster than function calls)
+- **Precomputed ALU Flags**: 64KB lookup tables for ADD/SUB/CP/INC/DEC operations (~2-5x faster than function calls)
 - **Register Dispatch Tables**: O(1) register access via function tables
 - **MicroOp `__slots__`**: Eliminates per-instruction allocation overhead
 - **Slow Path Flag**: Single boolean check instead of 4 attribute accesses
 - **16-bit Register Inlining**: ~28% faster than lambda/setattr approach
-- **Numba JIT**: Flag calculations compiled to native code
+- **Numba JIT**: 16-bit flag helpers compiled to native code
+- **64KB Decode Cache**: O(1) instruction dispatch with automatic invalidation
 
 ## Dependencies
 

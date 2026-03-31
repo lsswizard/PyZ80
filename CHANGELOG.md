@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0] - 2026-03-31
+
+### Dead Code Removal
+- **`core/primitives.py`**: Removed unused `write_byte`, `read_word`, `write_word`, `push_word`, `pop_word` (only `read_byte` is used by decoder)
+- **`core/flags.py`**: Removed unused `HALFCARRY_ADD_TABLE`, `HALFCARRY_SUB_TABLE`, `OVERFLOW_ADD_TABLE`, `OVERFLOW_SUB_TABLE`, `parity`, `cp_flags`, `add_flags`, `adc_flags`, `sub_flags`, `sbc_flags`, `inc_flags`, `dec_flags`, `and_flags`, `or_flags`, `xor_flags`, and unused Numba JIT functions for 8-bit flag computation
+- **`core/cpu.py`**: Removed unused `push16_at`, `pop16_at`
+- **`core/decoder.py`**: Removed unused `cache_stats()`
+- **`core/state.py`**: Removed unused `StateManager` class
+- **`core/timing.py`**: Deleted entire module (`TimingInfo`, `TimingEngine`, `t_states_to_ms`, `ms_to_t_states`, `t_states_to_us` were never used internally)
+- **`core/__init__.py`**: Removed exports for `StateManager`, `TimingInfo`, `TimingEngine`
+
+### Bug Fixes
+- **INI/IND/OUTI/OUTD PV flag** (`core/instructions/block.py`): Fixed `_compute_in_out_flags` — was incorrectly checking `old_b == 0x80`, now uses `PARITY_TABLE[(value + old_b) & 0x07]` per Z80 spec
+- **LDIR/LDDR BC=0 short-circuit**: Removed incorrect early return when BC=0 before execution; Z80 always executes the transfer body first, then checks repeat condition
+- **INIR/INDR/OTIR/OTDR B=0 short-circuit**: Same fix — removed incorrect early return when B=0 before execution
+- **`inc_ixd`/`dec_ixd` dead cycle increment** (`core/instructions/alu8.py`): Removed dead `cpu.cycles += 23` that was overwritten by `step()`
+
+### Verified
+- All 916 tests pass
+- Benchmark: ~440K instr/sec (~1.76 MHz effective)
+
 ## [1.9.0] - 2026-03-29
 
 ### Performance Improvements

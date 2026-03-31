@@ -224,29 +224,11 @@ class Z80CPU:
         self._cache_write(addr, value & 0xFF, base_t)
         self._cache_write((addr + 1) & 0xFFFF, value >> 8, base_t + 1)
 
-    def push16_at(self, value: int, base_t: int) -> int:
-        """Push 16-bit value at explicit T-states. Returns new SP."""
-        sp = (self.regs.SP - 2) & 0xFFFF
-        self._bus_write_direct(sp, value & 0xFF, base_t)
-        self._bus_write_direct((sp + 1) & 0xFFFF, value >> 8, base_t + 1)
-        self.regs.SP = sp
-        return sp
-
-    def pop16_at(self, base_t: int) -> int:
-        """Pop 16-bit value at explicit T-states. Returns value."""
-        sp = self.regs.SP
-        lo = self._bus_read(sp, base_t)
-        hi = self._bus_read((sp + 1) & 0xFFFF, base_t + 1)
-        self.regs.SP = (sp + 2) & 0xFFFF
-        return hi << 8 | lo
-
     def _cache_write(self, addr: int, value: int, cycles: int) -> None:
-        """Internal write wrapper that ensures the decoder cache is updated only on change."""
+        """Internal write wrapper that invalidates decoder cache on change."""
         addr &= 0xFFFF
         if self._mem[addr] != value:
             self._bus_write_direct(addr, value, cycles)
-            # Invalidate the cache for this address and the 3 preceding bytes
-            # to handle multi-byte instructions that might now be invalid.
             cache = self._cache_list
             cache[addr] = None
             cache[(addr - 1) & 0xFFFF] = None
