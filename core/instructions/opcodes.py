@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from ..core import Z80CPU

@@ -46,7 +46,6 @@ __all__ = [
     "COND_TABLE",
     "_ADD_PAIR",
     "_SUB_PAIR",
-    "DAA_TABLE",
     "DAA_FULL_FLAGS",
     "get_daa_result",
     "get_adc16_flags",
@@ -461,17 +460,13 @@ COND_TABLE = _build_cond_table()
 
 
 # ===========================================================================
-# DAA — Decimal Adjust Accumulator lookup tables
+# DAA — Decimal Adjust Accumulator lookup table
 # index = (N << 10) | (H << 9) | (C << 8) | A  = 2048 entries
 # Sequential correction: low nibble first, then high nibble on corrected value
-#
-# DAA_TABLE[index]      = (corrected_A, c_flag, h_flag)  — raw correction
 # DAA_FULL_FLAGS[index] = (corrected_A, full_flags_byte) — ready to use
-# ===========================================================================
 
 
-def _build_daa_tables():
-    raw = [(0, 0, 0)] * 2048
+def _build_daa_table():
     full = [(0, 0)] * 2048
 
     for n in range(2):
@@ -502,7 +497,6 @@ def _build_daa_tables():
                             new_c = 1
 
                     idx = base_idx | orig_a
-                    raw[idx] = (a, new_c, new_h)
 
                     # Build full flags byte
                     flags = input_f & FLAG_N  # preserve N
@@ -519,7 +513,7 @@ def _build_daa_tables():
                         flags |= FLAG_PV
                     full[idx] = (a, flags)
 
-    return raw, full
+    return full
 
 
-DAA_TABLE, DAA_FULL_FLAGS = _build_daa_tables()
+DAA_FULL_FLAGS = _build_daa_table()

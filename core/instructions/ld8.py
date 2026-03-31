@@ -27,13 +27,13 @@ def _read_addr_from_pc(cpu: "Z80CPU", offset: int = 1) -> int:
     return low | (high << 8)
 
 
-def _get_indexed_addr(cpu: "Z80CPU", is_iy: bool, offset_pos: int = 2) -> int:
+def _get_indexed_addr(cpu: "Z80CPU", is_iy: bool) -> int:
     """Calculate indexed address (IX+d) or (IY+d).
     Also sets MEMPTR, which is used for flag calculations in BIT instructions.
     """
     regs = cpu.regs
     pc = regs.PC
-    displacement = cpu._bus_read((pc + offset_pos) & 0xFFFF, cpu.cycles + 1)
+    displacement = cpu._bus_read((pc + 2) & 0xFFFF, cpu.cycles + 1)
     disp = displacement if displacement < 128 else displacement - 256
     addr = ((regs.IY if is_iy else regs.IX) + disp) & 0xFFFF
     regs.Memptr = addr

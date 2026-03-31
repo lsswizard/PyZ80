@@ -54,7 +54,7 @@ class InstructionDecoder:
         self._fd_fallback = self._build_fallback_table("FD")
 
     @staticmethod
-    def _make_dd_fd_fallback(handler, length):
+    def _make_dd_fd_fallback(handler):
         """Create a named fallback wrapper for unknown DD/FD prefixed instructions."""
 
         def fallback(cpu):
@@ -74,7 +74,7 @@ class InstructionDecoder:
             if entry:
                 handler, cycles, length, mnemonic = entry
                 table[opcode] = (
-                    self._make_dd_fd_fallback(handler, length),
+                    self._make_dd_fd_fallback(handler),
                     cycles + 4,
                     length + 1,
                     f"({prefix}) {mnemonic}",
@@ -150,9 +150,6 @@ class InstructionDecoder:
                 # The displacement is read at execution time by the handler
                 # via _get_indexed_addr(); we must NOT capture it here or
                 # the bit-number field of the opcode gets clobbered.
-                d = read_byte(memory, addr + 2)
-                if d >= 128:
-                    d -= 256
                 cb_op = read_byte(memory, addr + 3)
                 entry = get_ddcb_opcode(cb_op)
                 if entry:
@@ -174,9 +171,6 @@ class InstructionDecoder:
             fd_op = read_byte(memory, addr + 1)
             if fd_op == 0xCB:
                 # FDCB: FD CB d op  (4 bytes total)
-                d = read_byte(memory, addr + 2)
-                if d >= 128:
-                    d -= 256
                 cb_op = read_byte(memory, addr + 3)
                 entry = get_fdcb_opcode(cb_op)
                 if entry:

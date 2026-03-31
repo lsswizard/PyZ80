@@ -3,10 +3,7 @@ Z80 Pipeline Module
 Instruction execution primitives and micro-operation structures.
 """
 
-from typing import Callable, TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from .core import Z80CPU
+from typing import Callable, Any
 
 
 class MicroOp:
@@ -22,7 +19,7 @@ class MicroOp:
 
     def __init__(
         self,
-        handler: "Callable[[Z80CPU], int]",
+        handler: Callable[[Any], int],
         cycles: int,
         length: int,
         mnemonic: str = "",
@@ -45,10 +42,8 @@ class MicroOp:
 # =============================================================================
 
 
-def read_byte(mem: Any, addr: int, cpu: Any = None) -> int:
+def read_byte(mem: Any, addr: int) -> int:
     """Fast byte read from memory."""
-    if cpu is not None:
-        return cpu.read_byte(addr)
     if hasattr(mem, "read_byte"):
         return mem.read_byte(addr, 0)
     return mem[addr & 0xFFFF]
