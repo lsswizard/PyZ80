@@ -5,7 +5,6 @@ Snapshot and restore CPU state for debugging, rewind, and testing.
 
 from dataclasses import dataclass
 from typing import Dict, Any
-import copy
 
 
 @dataclass
@@ -123,9 +122,6 @@ class CPUState:
         """Create state from dictionary, ignoring unknown keys for forward-compat."""
         known = {f for f in cls.__dataclass_fields__}
         return cls(**{k: v for k, v in data.items() if k in known})
-
-    def copy(self) -> "CPUState":
-        return copy.copy(self)  # dataclass fields are all scalars — shallow is fine
 
     def __str__(self) -> str:
         return (
